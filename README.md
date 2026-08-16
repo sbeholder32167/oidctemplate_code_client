@@ -64,7 +64,7 @@ To avoid "dependency hell," this code is provided as **Template source code**. Y
 ## ⚠️ Important Notes
 - This code is **not a replacement for Spring Security OAuth Client**.
 - If your environment supports Spring Security OAuth Client package, we highly recommend using 'Spring Security OAuth Client Package'.
-- This template is intended as a bridge to reduce the attack surface by integrating Keycloak in legacy environments where standard OAuth libraries are difficult to deploy.
+- This template is intended as a bridge to reduce the attack surface by integrating Keycloak in legacy environments where standard Spring Security OAuth Client libraries are difficult to deploy.
 - The contents of this template code are subject to change without notice.
 
 ---

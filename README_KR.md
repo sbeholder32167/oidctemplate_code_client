@@ -67,8 +67,8 @@
 
 ## ⚠️ 주의사항
 - 본 코드는 **Spring Security OAuth Client를 대체하는 솔루션이 아닙니다.**
-- Spring Security OAuth Client를 사용할 수 있는 환경이라면 해당 방식을 권장합니다.
-- 본 프로젝트는 OAuth 사용이 곤란한 레거시 환경에서 Keycloak과 연동하여 공격 표면을 줄일 수 있는 매개체로서 작성되었습니다.
+- Spring Security OAuth Client를 사용할 수 있는 환경이라면, Spring Security OAuth Client의 사용을 권장합니다.
+- 본 코드는, **Spring Security OAuth Client의 사용이 곤란한 환경의 레거시 Application**일지라도, **Keycloak과 연동하여 공격 표면을 줄이기 위한 목적**에 도움이 되고자 만들어졌습니다.
 - 본 Template Code의 내용은 예고 없이 변경될 수 있습니다
 
 ---
