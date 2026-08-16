@@ -18,21 +18,21 @@
        xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.0.xsd
        http://www.springframework.org/schema/security http://www.springframework.org/schema/security/spring-security-4.2.xsd">
 
-       <!-- Legacy (Example)-->
+       <!-- Legacy Settings. (Example)-->
        <http pattern="/**/*.js" security="none" />
        <http pattern="/**/*.css" security="none" />
        <http pattern="/**/*.jpg" security="none" />
        <http pattern="/images/*" security="none" />
 
        <!-- OIDC Logout URL : Back Channel Controller Logout (avoid CSRF defense) -->
-       <!-- use Controller Type IDP Logout only.(Not Filter type.) -->
+       <!-- use Controller Type IDP Logout only.(Optional : Not Filter type.) -->
        <http pattern="/keycloak/logout.do" security="none" />
        
        <http auto-config="true" use-expressions="true">
-           <!-- OIDC URL (OIDC Login Filter parameters.)-->
+           <!-- Required: OIDC auth. URL (OIDC Login Filter parameters.)-->
            <intercept-url pattern="/account/oidc.do" access="permitAll" />
            <intercept-url pattern="/account/oidc_code.do" access="permitAll" />
-           <!-- OIDC by Controller URL -->
+           <!-- Required: OIDC auth. by Controller URL (Optional) -->
            <intercept-url pattern="/keycloak/oidc.do" access="permitAll" />
            <intercept-url pattern="/keycloak/oidc_code.do" access="permitAll" />
            <!-- OIDC Logout URL Front Channel Logout -->
@@ -40,16 +40,12 @@
 
            <!-- Legacy (Example)-->
            <intercept-url pattern="/account/login.do" access="permitAll" />
-           <intercept-url pattern="/account/checkIdExist.do" access="permitAll" />
-           <intercept-url pattern="/account/useradd.do" access="permitAll" />
            <intercept-url pattern="/home/notice.do" access="hasRole('ROLE_GUEST')" />
-           <intercept-url pattern="/category/add.do" access="hasRole('ROLE_MANAGER')" />
-           <intercept-url pattern="/category/modify.do" access="hasRole('ROLE_MANAGER')" />
            <intercept-url pattern="/category/remove.do" access="hasRole('ROLE_MANAGER')" />
            <intercept-url pattern="/group/*" access="hasRole('ROLE_MANAGER')" />
            <intercept-url pattern="/**" access="hasRole('ROLE_USER')" />
 
-           <!-- OIDC Filter -->
+           <!-- Required: OIDC Filter -->
            <custom-filter ref="OIDCLoginFilter" before="FORM_LOGIN_FILTER" />
            <custom-filter ref="OIDCLogoutFilter" before="LOGOUT_FILTER" />
            <csrf request-matcher-ref="idpLogoutMatcher" disabled="true" />
@@ -78,10 +74,14 @@
        </beans:bean>
        <beans:bean id="authService" class="com.example.legacy.service.AuthService" />
        <beans:bean id="legacyAuthenticationProvider" class="com.example.legacy.security.LegacyAuthenticationProvider" />
-       
+
+       <!-- Required: Avoid CSRF protection for Inbound BackChannel Logout endpoint. -->
+       <bean id="idpLogoutMatcher" class="org.springframework.security.web.util.matcher.AntPathRequestMatcher">
+           <constructor-arg value="/account/logout.do" /> <!-- Customize Setting -->
+       </bean>
        <authentication-manager alias="authenticationManager">
            <authentication-provider ref="legacyAuthenticationProvider" />
-           <!-- OIDC Authentication Provider -->
+           <!-- Required: OIDC Authentication Provider -->
            <authentication-provider ref="OIDCAuthenticationProvider" />
        </authentication-manager>
 </beans:beans>

@@ -137,9 +137,7 @@
             <property name="idpLogoutUri" value="/account/logout.do" /> <!-- Customize Setting -->
             <property name="exceptionHandler" ref="OIDCExceptionHandler" />
         </bean>
-        <bean id="idpLogoutMatcher" class="org.springframework.security.web.util.matcher.AntPathRequestMatcher">
-            <constructor-arg value="/account/logout.do" /> <!-- Customize Setting -->
-        </bean>
+
         <!-- OIDC Session Interceptor -->
         <bean id="OIDCSessionInterceptor" class="io.github.sbeholder32167.oidctemplate.client.session.OIDCSessionInterceptor">
             <constructor-arg index="0" ref="OIDCSessionManager" />
