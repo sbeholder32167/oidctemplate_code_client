@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2026 sbeholder6684@gmail.com
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+ http://www.apache.org/licenses/LICENSE-2.0
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and limitations under the License.
+-->
+<!-- OIDC Template Code 설정 Sample XML (Spring Security 미 적용시) -->
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:mvc="http://www.springframework.org/schema/mvc"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.0.xsd
+       http://www.springframework.org/schema/mvc http://www.springframework.org/schema/mvc/spring-mvc-4.0.xsd ">
+    <mvc:annotation-driven />
+
+    <!-- OIDC Config Bean --><!-- Customize Setting -->
+    <bean id="OIDCConfig" class="io.github.sbeholder32167.oidctemplate.client.OIDCConfig">
+        <property name="clientId" value="[Client-ID]" />
+        <property name="clientSecret" value="[Client-Secret]"/>
+        <property name="redirectUri" value="http://localhost:8080/Legacy/login/oidc_code.do" />
+        <property name="authenticationEndpoint" value="https://keycloak-idp:8443/realms/Demonstration/protocol/openid-connect/auth" />
+        <property name="tokenEndpoint" value="https://keycloak-idp:8443/realms/Demonstration/protocol/openid-connect/token" />
+        <property name="jwksUri" value="https://keycloak-idp:8443/realms/Demonstration/protocol/openid-connect/certs"/>
+        <property name="logoutUri" value="https://keycloak-idp:8443/realms/Demonstration/protocol/openid-connect/logout" />
+        <property name="postLogoutUri" value="http://localhost:8080/Legacy/login/index.do" />
+        <property name="scope" value="openid profile email"/>
+        <!-- Factory Pattern화에 필요한 항목으로서 현재는 의미없음 -->
+        <property name="provider" value="KEYCLOAK"/>
+    </bean>
+    <!-- OIDC Authentication Parameter Storage -->
+    <bean id="OIDCAuthParameterStorage" class="io.github.sbeholder32167.oidctemplate.client.session.storage.impl.LocalMemoryAuthParameterStorage" />
+    <!-- OIDC Keycloak Provider -->
+    <bean id="OIDCProvider" class="io.github.sbeholder32167.oidctemplate.client.provider.impl.KeycloakProvider">
+        <constructor-arg index="0" ref="OIDCConfig" />
+        <constructor-arg index="1" ref="restfulUtil" />
+        <constructor-arg index="2" ref="OIDCAuthParameterStorage" />
+        <property name="defaultAccessTokenDurationSec" value="300" />
+        <property name="defaultRefreshTokenDurationSec" value="1800" />
+    </bean>
+
+    <!-- OIDC Session Duplicate Policy -->
+    <bean id="OIDCSessionDuplicatePolicy" class="io.github.sbeholder32167.oidctemplate.client.session.duplicatepolicy.impl.MaxDenySessionDuplicatePolicy">
+        <property name="maxSessionCnt" value="1" />
+    </bean>
+    <!--
+    <beans:bean id="OIDCSessionDuplicatePolicy" class="io.github.sbeholder32167.oidctemplate.session.duplicatepolicy.impl.OneAllowSessionDuplicatePolicy" />
+    -->
+
+    <!-- OIDC Auto Token Checker -->
+    <bean id="OIDCAutoTokenChecker" class="io.github.sbeholder32167.oidctemplate.client.session.refresh.impl.AccessTokenAutoTokenChecker" />
+    <!-- <bean id="OIDCAutoTokenChecker" class="io.github.sbeholder32167.oidctemplate.session.refresh.impl.RefreshTokenAutoTokenChecker" /> -->
+    <!-- OIDC Session Repository -->
+    <bean id="OIDCSessionRepository" class="io.github.sbeholder32167.oidctemplate.client.session.repository.impl.LocalMapSessionRepository" />
+    <!-- OIDC Session Registry -->
+    <bean id="OIDCSessionRegistry" class="io.github.sbeholder32167.oidctemplate.client.session.registry.impl.LocalMapSessionRegistry">
+        <constructor-arg index="0" ref="OIDCSessionRepository"/>
+    </bean>
+
+    <!-- OIDC Session Manager -->
+    <bean id="OIDCSessionManager" class="io.github.sbeholder32167.oidctemplate.client.session.OIDCSessionManager" >
+        <constructor-arg index="0" ref="OIDCProvider" />
+        <constructor-arg index="1" ref="OIDCSessionRegistry" />
+        <constructor-arg index="2" ref="OIDCAuthParameterStorage" />
+        <constructor-arg index="3" ref="clientLegacySessionAdapter" />
+        <property name="sessionDuplicatePolicy" ref="OIDCSessionDuplicatePolicy" />
+        <property name="timeoutSec" value="1800" />
+        <property name="idpSessionTimeoutSec" value="1800" />
+        <property name="skewSec" value="60" />
+        <property name="autoTokenChecker" ref="OIDCAutoTokenChecker" />
+    </bean>
+
+    <!-- Restful Strategy for Restful Object -->
+    <bean id="allAllowRestStrategy" class="io.github.sbeholder32167.oidctemplate.rest.strategy.AllAllowStrategy" />
+    <bean id="normalRestStrategy" class="io.github.sbeholder32167.oidctemplate.rest.strategy.NormalStrategy" />
+    <!-- Rest Object -->
+    <bean id="restfulUtil" class="io.github.sbeholder32167.oidctemplate.rest.RestfulUtil">
+        <!-- use in Development only. -->
+        <constructor-arg index="0" ref="allAllowRestStrategy" />
+        <!-- use Staging, Production. -->
+        <!-- <constructor-arg index="0" ref="normalRestStrategy" /> -->
+    </bean>
+
+    <!-- OIDC Login/Logout Adapter : CUSTOMIZING AREA -->
+    <bean id="clientLoginAdapter" class="com.example.legacy.adapter.LegacyLoginAdapterImpl"/>
+    <bean id="clientLogoutAdapter" class="com.example.legacy.adapter.LegacyLogoutAdapterImpl"/>
+    <bean id="clientLegacySessionAdapter" class="com.example.legacy.adapter.LegacySessionAdapterImpl"/>
+    <bean id="clientAuthConvertAdapter" class="com.example.legacy.adapter.LegacyAuthConvertAdapterImpl"/>
+    <bean id="OIDCExceptionHandler" class="com.example.legacy.adapter.LegacyOIDCExceptionHandlerImpl" />
+    <!-- <bean id="clientAuthzExceptionAdapter" class="com.example.legacy.adapter.LegacyAuthzExceptionAdapterImpl" /> -->
+
+    <!-- OIDC Authentication Success Handler -->
+    <bean id="OIDCAuthSuccessHandler" class="io.github.sbeholder32167.oidctemplate.client.nonsecurity.OIDCAuthSuccessHandler">
+        <constructor-arg index="0" ref="OIDCSessionManager" />
+        <property name="loginSuccessUri" value="/main/index.do" /> <!-- Customize Setting -->
+        <property name="clientLoginAdapter" ref="clientLoginAdapter" />
+    </bean>
+    <!-- OIDC Authentication Failure Handler -->
+    <bean id="OIDCAuthFailureHandler" class="io.github.sbeholder32167.oidctemplate.client.nonsecurity.OIDCAuthFailureHandler" >
+        <constructor-arg index="0" value="/login/index.do?error=oidc" /> <!-- Customize Setting -->
+        <property name="clientLoginAdapter" ref="clientLoginAdapter" />
+    </bean>
+
+    <!-- OIDC Authentication Filter -->
+    <!--
+        must be added to web.xml
+          <filter>
+            <filter-name>OIDCLoginFilter</filter-name>
+            <filter-class>org.springframework.web.filter.DelegatingFilterProxy</filter-class>
+          </filter>
+          <filter-mapping>
+            <filter-name>OIDCLoginFilter</filter-name>
+            <url-pattern>/*</url-pattern>
+          </filter-mapping>
+          <filter>
+            <filter-name>OIDCLogoutFilter</filter-name>
+            <filter-class>org.springframework.web.filter.DelegatingFilterProxy</filter-class>
+          </filter>
+          <filter-mapping>
+            <filter-name>OIDCLogoutFilter</filter-name>
+            <url-pattern>/*</url-pattern>
+          </filter-mapping>
+    -->
+    <!-- OIDC Login Filter -->
+    <bean id="OIDCLoginFilter" class="io.github.sbeholder32167.oidctemplate.client.nonsecurity.OIDCLoginFilter">
+        <constructor-arg index="0" value="/login/oidc.do" /> <!-- Customize Setting -->
+        <constructor-arg index="1" value="/login/oidc_code.do" /> <!-- Customize Setting -->
+        <constructor-arg index="2" ref="OIDCProvider" />
+        <constructor-arg index="3" ref="OIDCSessionManager" />
+        <constructor-arg index="4" ref="clientAuthConvertAdapter" />
+        <constructor-arg index="5" ref="clientLegacySessionAdapter" />
+        <constructor-arg index="6" ref="OIDCAuthSuccessHandler" />
+        <constructor-arg index="7" ref="OIDCAuthFailureHandler" />
+        <property name="exceptionHandler" ref="OIDCExceptionHandler" />
+    </bean>
+    <!-- OIDC Logout Filter -->
+    <bean id="OIDCLogoutFilter" class="io.github.sbeholder32167.oidctemplate.client.OIDCLogoutFilter">
+        <constructor-arg index="0" ref="OIDCProvider" />
+        <constructor-arg index="1" ref="OIDCSessionManager" />
+        <constructor-arg index="2" ref="clientLogoutAdapter" />
+        <property name="manualLogoutUri" value="/login/oidc_logout.do" /> <!-- Customize Setting -->
+        <property name="idpLogoutUri" value="/login/logout.do" /> <!-- Customize Setting -->
+        <property name="exceptionHandler" ref="OIDCExceptionHandler" />
+    </bean>
+
+    <!-- OIDC Session Interceptor -->
+    <bean id="OIDCSessionInterceptor" class="io.github.sbeholder32167.oidctemplate.client.session.OIDCSessionInterceptor">
+        <constructor-arg index="0" ref="OIDCSessionManager" />
+        <constructor-arg index="1" ref="OIDCAuthParameterStorage" />
+        <property name="mainPageUri" value="/login/index.do" /> <!-- Customize Setting -->
+        <property name="exceptionUri" value="/login/index.do" /> <!-- Customize Setting -->
+    </bean>
+
+    <mvc:interceptors>
+        <mvc:interceptor>
+            <mvc:mapping path="/**"/>
+            <mvc:exclude-mapping path="/keycloak/oidc.do"/> <!-- Customize Setting -->
+            <mvc:exclude-mapping path="/keycloak/oidc_code.do"/> <!-- Customize Setting -->
+            <mvc:exclude-mapping path="/keycloak/logout.do"/> <!-- Customize Setting -->
+            <mvc:exclude-mapping path="/css/**"/>
+            <mvc:exclude-mapping path="/js/**"/>
+            <mvc:exclude-mapping path="/images/**"/>
+            <ref bean="OIDCSessionInterceptor" />
+        </mvc:interceptor>
+    </mvc:interceptors>
+
+</beans>

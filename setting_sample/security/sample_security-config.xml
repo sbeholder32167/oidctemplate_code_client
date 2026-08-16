@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2026 sbeholder6684@gmail.com
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+ http://www.apache.org/licenses/LICENSE-2.0
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and limitations under the License.
+-->
+<!-- OIDC Template Code 설정 Sample XML (Spring Security 사용 시 - Spring Security 설정만) -->
+<beans:beans xmlns="http://www.springframework.org/schema/security"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:beans="http://www.springframework.org/schema/beans"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.0.xsd
+       http://www.springframework.org/schema/security http://www.springframework.org/schema/security/spring-security-4.2.xsd">
+
+       <!-- Legacy (Example)-->
+       <http pattern="/**/*.js" security="none" />
+       <http pattern="/**/*.css" security="none" />
+       <http pattern="/**/*.jpg" security="none" />
+       <http pattern="/images/*" security="none" />
+
+       <!-- OIDC Logout URL : Back Channel Controller Logout (avoid CSRF defense) -->
+       <!-- use Controller Type IDP Logout only.(Not Filter type.) -->
+       <http pattern="/keycloak/logout.do" security="none" />
+       
+       <http auto-config="true" use-expressions="true">
+           <!-- OIDC URL (OIDC Login Filter parameters.)-->
+           <intercept-url pattern="/account/oidc.do" access="permitAll" />
+           <intercept-url pattern="/account/oidc_code.do" access="permitAll" />
+           <!-- OIDC by Controller URL -->
+           <intercept-url pattern="/keycloak/oidc.do" access="permitAll" />
+           <intercept-url pattern="/keycloak/oidc_code.do" access="permitAll" />
+           <!-- OIDC Logout URL Front Channel Logout -->
+           <!-- <intercept-url pattern="/keycloak/logout.do" access="permitAll" /> -->
+
+           <!-- Legacy (Example)-->
+           <intercept-url pattern="/account/login.do" access="permitAll" />
+           <intercept-url pattern="/account/checkIdExist.do" access="permitAll" />
+           <intercept-url pattern="/account/useradd.do" access="permitAll" />
+           <intercept-url pattern="/home/notice.do" access="hasRole('ROLE_GUEST')" />
+           <intercept-url pattern="/category/add.do" access="hasRole('ROLE_MANAGER')" />
+           <intercept-url pattern="/category/modify.do" access="hasRole('ROLE_MANAGER')" />
+           <intercept-url pattern="/category/remove.do" access="hasRole('ROLE_MANAGER')" />
+           <intercept-url pattern="/group/*" access="hasRole('ROLE_MANAGER')" />
+           <intercept-url pattern="/**" access="hasRole('ROLE_USER')" />
+
+           <!-- OIDC Filter -->
+           <custom-filter ref="OIDCLoginFilter" before="FORM_LOGIN_FILTER" />
+           <custom-filter ref="OIDCLogoutFilter" before="LOGOUT_FILTER" />
+           <csrf request-matcher-ref="idpLogoutMatcher" disabled="true" />
+
+           <!-- Legacy Login / Logout (Example)-->
+           <form-login login-page="/account/login.do" username-parameter="userId" password-parameter="userPw" 
+                       login-processing-url="/account/process" default-target-url="/home/notice.do" authentication-failure-url="/account/login.do#loginfailed"
+                       always-use-default-target="true" />
+           <logout logout-url="/account/logout" invalidate-session="false"
+                   success-handler-ref="legacyLogoutHandler" />
+       </http>
+       <!-- Legacy Settings (Example)-->
+       <beans:bean id="legacyLogoutHandler" class="com.example.legacy.LegacyLogoutHandler">
+       	   <beans:property name="defaultTargetUrl" value="/account/login.do#logout" />
+       </beans:bean>
+       <global-method-security pre-post-annotations="enabled" />
+       
+       <!-- Legacy Authentication Provider Settings (Example)-->
+       <beans:bean id="passwordEncoder" class="org.springframework.security.authentication.encoding.ShaPasswordEncoder" >
+           <beans:constructor-arg>
+               <beans:value>256</beans:value>
+           </beans:constructor-arg>
+       </beans:bean>
+       <beans:bean id="saltSource" class="org.springframework.security.authentication.dao.ReflectionSaltSource">
+           <beans:property name="userPropertyToUse" value="userSalt" />
+       </beans:bean>
+       <beans:bean id="authService" class="com.example.legacy.service.AuthService" />
+       <beans:bean id="legacyAuthenticationProvider" class="com.example.legacy.security.LegacyAuthenticationProvider" />
+       
+       <authentication-manager alias="authenticationManager">
+           <authentication-provider ref="legacyAuthenticationProvider" />
+           <!-- OIDC Authentication Provider -->
+           <authentication-provider ref="OIDCAuthenticationProvider" />
+       </authentication-manager>
+</beans:beans>
