@@ -25,27 +25,31 @@ To avoid "dependency hell," this code is provided as **Template source code**. Y
 - **Minimal Intrusion**: Designed to 'add' custom authentication logic rather than modifying existing logic, ensuring minimal impact on legacy systems.
 - **Template Source Code**: Delivered as source code rather than a Jar package, allowing for flexible modification and seamless integration into your specific environment.
 - **Abstracted Adapter Interfaces**: Key areas requiring customization—such as session handling, post-login/logout processing, and exception handling—are defined as interfaces.
-    - *Implementation Example: https://github.com/sbeholder32167/egov_sample_with_oidctemplate_code_client*
 - **Flexible Session Management**: Comes with a default `LocalMap` implementation, with the ability to switch to clustered storage (e.g., Redis, ehCache) by implementing the registry/repository.
 
 ---
 
 ## 🚀 Integration Steps
 1. **Copy Source**: Copy the package files (including `io.github`) from the `src` directory into your application's source folder.
+    - If Spring Security does not exist in the application to which it is applied, delete the i.g.s.oidctemplate.client.security and i.g.s.oidctemplate.egov packages from the copied files.
 2. **Implement Adapters**: Implement the **5 provided Adapter Interfaces**:
     - **Token Handling**: Process tokens and reflect them in your legacy session. (i.g.s.oidctemplate.adapter.ClientAuthConvertAdapter)
     - **Post Authentication Handling**: Handle logic for login success/failures (e.g., duplicate sessions). (i.g.s.oidctemplate.adapter.ClientLoginAdapter)
     - **Logout**: Handle pre- and post-logout actions in coordination with the Keycloak IDP. (i.g.s.oidctemplate.adapter.ClientLogoutAdapter)
     - **Session Handling**: Manage legacy sessions within the template code. (i.g.s.oidctemplate.adapter.ClientLegacySessionAdapter)
     - **Exception Handling**: Define behaviors for exceptions during the authentication flow. (i.g.s.oidctemplate.exception.OIDCExceptionHandler)
-3. **Copy Configuration**: Copy the `sample_oidc-config.xml` sample from the `setting_sample` directory to your application's config folder.
+3. **Copy Configuration XML file**: Copy the `sample_oidc-config.xml` sample from the `setting_sample` directory to your application's config folder.
     - Changing name of the file may be required according to config file name format in your application.
+    - If the Spring Security Package exists in the target application, use `sample_oidc-config.xml` in the `setting_sample/security` directory.
+    - If the Spring Security Package does not exist in the target application, use `sample_oidc-config.xml` in the `setting_sample/non-security` directory.
 4. **Register Beans**: Apply your implemented 5 Adapter classes to section named 'CUSTOMIZING AREA' in `sample_oidc-config.xml`.
 5. **Spring Security Configuration**:
     - Set `OIDCLoginFilter` start and redirect URIs to `permitAll`.
     - Add CSRF bypass settings for the `OIDCLogoutFilter` logout URI.
 6. **Environment Setup**: Configure Keycloak URIs, Client ID, Client Secret, and redirect URIs in `sample_oidc-config.xml`.
 7. **Build & Test**: Build your application and verify the authentication flow.
+
+- *Implementation Example: https://github.com/sbeholder32167/egov_sample_with_oidctemplate_code_client*
 
 ---
 
