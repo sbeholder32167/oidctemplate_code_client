@@ -20,12 +20,12 @@ import javax.servlet.http.HttpServletResponse;
 /**
  * Client Legacy Session Adapter.<br>
  *
- * <p>Controller에서 Client의 레거시 세션 처리 시 사용<br>
- * Client의 WAS Session을 고려한 Customizing이 필요한 인터페이스
- * Client의 자체 세션 관리에 연동할 때 사용한다<br><br>
+ * <p>OIDCLoginFilter, {@link OIDCSessionManager}에서 Client의 Legacy 세션 취급 시 사용<br>
+ * Client의 WAS Session을 고려한 Customizing이 필요한 인터페이스.<br>
+ * Client의 Legacy 세션 관리에 연동할 때 사용한다<br><br>
  * ※.주의 <br>
- * {@link OIDCSessionManager}는 자체 OIDC Session을 관리하는 인터페이스이며,<br>
- * 그 인터페이스는 OIDC의 SID에 따른 세션과 토큰값을 관리하는 인터페이스이다. Legacy Client와 무관하다.<br>
+ * {@link OIDCSessionManager}는 자체 OIDC Session을 관리하며,<br>
+ * OIDC의 SID에 따른 세션과 토큰값을 관리한다. Legacy Client Session과는 같은 WAS Session ID를 가진다.<br>
  * 그에 비해, 이 인터페이스는 Legacy Client Session과의 연동을 위한 인터페이스이다.</p>
  *
  * @author sbeholder6684

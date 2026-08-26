@@ -25,11 +25,16 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 
 import java.io.ByteArrayInputStream;
+import java.math.BigInteger;
+import java.security.KeyFactory;
+import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.RSAPublicKey;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.RSAPublicKeySpec;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -40,7 +45,7 @@ import java.util.Map;
  * <p>RSA 알고리즘으로 JWKS 검증하는 로직이 구현된 Class.</p>
  *
  * @author sbeholder6684
- * @version 1.0.0
+ * @version 1.0.1
  * @since 2026-05-26
  */
 public class RSAJWKSVerifier {
@@ -67,78 +72,25 @@ public class RSAJWKSVerifier {
             throw new JWKSException(JWKSErrorEnum.DECODE_JWT, jwtDecodeException.getLocalizedMessage());
         }
         String algStr = decodedTkn.getAlgorithm();
-        if (algStr == null ){
+        if (algStr == null){
             throw new JWKSException(JWKSErrorEnum.NULL_ALG, "Not found algorithm");
         }else if (algStr.isEmpty() || algStr.trim().isEmpty()){
             throw new JWKSException(JWKSErrorEnum.NO_ALG, "Empty algorithm");
         }
         LogUtil.info("Token Signature Algorithm:" + algStr, RSAJWKSVerifier.class.getName());
+        String keyId = decodedTkn.getHeaderClaim("kid").asString();
 
         //-- check audience
         if (clientId != null && !clientId.trim().isEmpty()){
-            //-- 체크하라고 Client ID를 넣어줘야 동작하게 했다. null일 경우엔 검사하지 않고 Skip한다.
-            boolean isInAudience = false;
-            List<String> audLst = decodedTkn.getAudience();
-            if (audLst == null){
-                throw new JWKSException(JWKSErrorEnum.NULL_AUDIENCE, "Null Audience List.");
-            }else {
-                for (String aud : audLst){
-                    if (aud.trim().equals(clientId.trim())){
-                        isInAudience = true;
-                        break;
-                    }
-                }
-            }
-            if (!isInAudience){
-                throw new JWKSException(JWKSErrorEnum.INVALID_AUDIENCE, "Client ID is not in Audience List.");
-            }
-            LogUtil.info("Client ID is exist in Audience List.", RSAJWKSVerifier.class.getName());
+            //-- Client ID가 지정되었을 때만 동작. null일 경우엔 검사하지 않고 Skip한다.
+            checkAudience(decodedTkn, clientId);
         }
-        //-- prepare to fetch JSON Web Key set.
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-        ResponseEntity<Map> response = restUtil.doRestful(jwksEndpoint, HttpMethod.GET, headers, null, Map.class);
-        if (response == null){
-            throw new JWKSException(JWKSErrorEnum.NULL_JWKS_RESPONSE, "Null JWKS response");
-        }
-        LogUtil.info("JWKS access Status : " + response.getStatusCode().value(), RSAJWKSVerifier.class.getName());
-        Map<?,?> data = response.getBody();
-        if (response.getStatusCode().value() != 200 || data == null){
-            throw new JWKSException(JWKSErrorEnum.FAILED_JWKS_RESPONSE, "JWKS Endpoint process has failed.");
-        }
-
-        boolean foundCerts = false;
-        String certStr = null;
-        @SuppressWarnings("unchecked")
-        List<Object> rootLst = (List<Object>)data.get("keys");
+        //-- query JSON Web Key set.
+        List<Object> rootLst = queryJWKS(restUtil, jwksEndpoint);
         if (rootLst == null){
             throw new JWKSException(JWKSErrorEnum.NO_KEYS, "Null JWKS Keys.");
         }
-        for (Object o : rootLst){
-            @SuppressWarnings("unchecked")
-            Map<String, Object> el = (Map<String, Object>)o;
-            if (el != null && el.get("alg") != null && String.valueOf(el.get("alg")).equals(algStr)){
-                @SuppressWarnings("unchecked")
-                List<String> certCoverLst = (List<String>) el.get("x5c");
-                certStr = certCoverLst.get(0);
-                // NOSONAR System.out.println("JWKS Cert Str : " + certStr);
-                foundCerts = true;
-                break;
-            }
-        }
-        PublicKey pk;
-        if (!foundCerts){
-            throw new JWKSException(JWKSErrorEnum.NO_CERTS, "Not found certification.");
-        }
-        CertificateFactory certFactory;
-        try {
-            certFactory = CertificateFactory.getInstance("X.509");
-            byte[] decodedCerts = Base64.getDecoder().decode(certStr);
-            X509Certificate certificate = (X509Certificate) certFactory.generateCertificate(new ByteArrayInputStream(decodedCerts));
-            pk = certificate.getPublicKey();
-        } catch (CertificateException e) {
-            throw new JWKSException(JWKSErrorEnum.GEN_CERTS_ERR, "Certificate Exception" + e.getLocalizedMessage());
-        }
+        PublicKey pk = findCertsInKeyList(rootLst, algStr, keyId);
         if (pk == null){
             throw new JWKSException(JWKSErrorEnum.EXT_CERTS_ERR, "Can`t extract Public key from certificate.");
         }
@@ -162,6 +114,124 @@ public class RSAJWKSVerifier {
             }
         }catch (SignatureVerificationException e){
             throw new JWKSException(JWKSErrorEnum.INVALID_SIG, "Signature Verification ERROR:" + e.getLocalizedMessage());
+        }
+    }
+
+    /**
+     * Audience Claim이 주어진 Client ID와 일치하는지 검증
+     * @param decodedToken Decoded Token
+     * @param clientId Client ID
+     * @throws JWKSException Audience 리스트가 없거나, Audience가 일치하지 않을 경우 발생.
+     */
+    private static void checkAudience(DecodedJWT decodedToken, final String clientId) throws JWKSException {
+        //-- Client ID가 지정되었을 때만 동작. null일 경우엔 검사하지 않고 Skip한다.
+        boolean isInAudience = false;
+        List<String> audLst = decodedToken.getAudience();
+        if (audLst == null){
+            throw new JWKSException(JWKSErrorEnum.NULL_AUDIENCE, "Null Audience List.");
+        }else {
+            for (String aud : audLst){
+                if (aud.trim().equals(clientId.trim())){
+                    isInAudience = true;
+                    break;
+                }
+            }
+        }
+        if (!isInAudience){
+            throw new JWKSException(JWKSErrorEnum.INVALID_AUDIENCE, "Client ID is not in Audience List.");
+        }
+        LogUtil.info("Client ID is exist in Audience List.", RSAJWKSVerifier.class.getName());
+    }
+
+    /**
+     * JSON Web Key set을 받아온다
+     * @param restfulUtil Restful 객체.
+     * @param jwksUri JWKS Endpoint URI
+     * @return JSON Web key Set List
+     * @throws JWKSException Null respoinse 또는 query가 실패했을 경우 발생.
+     */
+    private static List<Object> queryJWKS(final RestfulUtil restfulUtil, final String jwksUri) throws JWKSException {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        ResponseEntity<Map> response = restfulUtil.doRestful(jwksUri, HttpMethod.GET, headers, null, Map.class);
+        if (response == null){
+            throw new JWKSException(JWKSErrorEnum.NULL_JWKS_RESPONSE, "Null JWKS response");
+        }
+        LogUtil.info("JWKS access Status : " + response.getStatusCode().value(), RSAJWKSVerifier.class.getName());
+        Map<?,?> data = response.getBody();
+        if (response.getStatusCode().value() != 200 || data == null){
+            throw new JWKSException(JWKSErrorEnum.FAILED_JWKS_RESPONSE, "JWKS Endpoint process has failed.");
+        }
+        @SuppressWarnings("unchecked")
+        List<Object> result = (List<Object>)data.get("keys");
+        return result;
+    }
+
+    /**
+     * Key List 에서 인증서를 찾는다.<br>
+     * @param keyList Key List
+     * @param algorithm 알고리즘
+     * @param keyId Key ID. Header에서 추출.
+     * @return 인증서를 리턴.
+     * @throws JWKSException 인증서가 제대로 생성되지 않았거나 인증서 문자열이 없을 경우.
+     */
+    private static PublicKey findCertsInKeyList(List<Object> keyList, final String algorithm, final String keyId) throws JWKSException{
+        for (Object o : keyList){
+            @SuppressWarnings("unchecked")
+            Map<String, Object> el = (Map<String, Object>)o;
+            if (el != null && el.get("alg") != null && String.valueOf(el.get("alg")).equals(algorithm)){
+                if (el.get("x5c") != null){
+                    @SuppressWarnings("unchecked")
+                    List<String> certCoverLst = (List<String>) el.get("x5c");
+                    if (keyId != null){
+                        if (keyId.equals(el.get("kid"))){
+                            return getPublicKeyFromX5c(certCoverLst.get(0));
+                        }
+                    }else{
+                        //-- Default if no Key id : first element.
+                        return getPublicKeyFromX5c(certCoverLst.get(0));
+                    }
+                }else if (el.get("n") != null && el.get("e") != null){
+                    if (keyId != null){
+                        if (keyId.equals(el.get("kid"))){
+                            return getPublicKeyFromJwk(String.valueOf(el.get("n")), String.valueOf(el.get("e")));
+                        }
+                    }else{
+                        //-- Default if no Key id : first element.
+                        return getPublicKeyFromJwk(String.valueOf(el.get("n")), String.valueOf(el.get("e")));
+                    }
+                }
+            }
+        }
+        throw new JWKSException(JWKSErrorEnum.GEN_CERTS_ERR, "no string to extract certs.");
+    }
+
+    private static PublicKey getPublicKeyFromX5c(final String x5cStr) throws JWKSException{
+        try {
+            CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
+            byte[] decodedCerts = Base64.getDecoder().decode(x5cStr);
+            X509Certificate certificate = (X509Certificate) certFactory.generateCertificate(new ByteArrayInputStream(decodedCerts));
+            return certificate.getPublicKey();
+        }catch(CertificateException ce){
+            throw new JWKSException(JWKSErrorEnum.GEN_CERTS_ERR, ce.getLocalizedMessage());
+        }
+    }
+    private static PublicKey getPublicKeyFromJwk(final String nStr, final String eStr) throws JWKSException{
+        //-- decode Base64URL.
+        byte[] nBytes = Base64.getUrlDecoder().decode(nStr);
+        byte[] eBytes = Base64.getUrlDecoder().decode(eStr);
+
+        //-- convert to BigInteger.
+        BigInteger modulus = new BigInteger(1, nBytes);
+        BigInteger publicExponent = new BigInteger(1, eBytes);
+
+        RSAPublicKeySpec spec = new RSAPublicKeySpec(modulus, publicExponent);
+        KeyFactory keyFactory;
+        try {
+            keyFactory = KeyFactory.getInstance("RSA");
+            return keyFactory.generatePublic(spec);
+        } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
+            throw new JWKSException(JWKSErrorEnum.GEN_CERTS_ERR, e.getLocalizedMessage());
         }
     }
 }

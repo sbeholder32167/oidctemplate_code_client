@@ -71,22 +71,25 @@ public class RestfulUtil {
                 tempParam.add(entry.getKey(), entry.getValue());
             }
         }
-        HttpEntity<MultiValueMap<String, String>> entity = new HttpEntity<>(tempParam, headers);
-        try{
-            return restTemplate.exchange(uri, method, entity, resultCls);
-        }catch(HttpClientErrorException | HttpServerErrorException ce){
-            LogUtil.error(ce.getLocalizedMessage(), this);
-            return new ResponseEntity<>(null, ce.getStatusCode());
-        }catch(RestClientException re){
-            LogUtil.error(re.getLocalizedMessage(), this);
-            return new ResponseEntity<>(null, HttpStatus.SERVICE_UNAVAILABLE);
-        }
+        return this.doRestfulMulti(uri, method, headers, tempParam, resultCls);
     }
     public <T> ResponseEntity<T> doRestfulMulti(String uri, HttpMethod method,
                                                 HttpHeaders headers,
                                                 MultiValueMap<String, String> bodyParam,
                                                 Class<T> resultCls){
         HttpEntity<MultiValueMap<String, String>> entity = new HttpEntity<>(bodyParam, headers);
+        return this.exchange(uri, method, entity, resultCls);
+    }
+
+    public <T> ResponseEntity<T> doRestfulRawString(String uri, HttpMethod method,
+                                                HttpHeaders headers,
+                                                String rawParamStr,
+                                                Class<T> resultCls){
+        HttpEntity<String> entity = new HttpEntity<>(rawParamStr, headers);
+        return this.exchange(uri, method, entity, resultCls);
+    }
+
+    private <T> ResponseEntity<T> exchange(String uri, HttpMethod method, HttpEntity<?> entity, Class<T> resultCls){
         try{
             return restTemplate.exchange(uri, method, entity, resultCls);
         }catch(HttpClientErrorException | HttpServerErrorException ce){

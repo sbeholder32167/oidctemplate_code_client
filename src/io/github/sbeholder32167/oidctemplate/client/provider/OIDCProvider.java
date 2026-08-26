@@ -14,6 +14,7 @@ package io.github.sbeholder32167.oidctemplate.client.provider;
 
 import io.github.sbeholder32167.oidctemplate.adapter.ClientLogoutAdapter;
 import io.github.sbeholder32167.oidctemplate.client.session.OIDCSessionManager;
+import io.github.sbeholder32167.oidctemplate.client.tokens.OIDCTokens;
 import io.github.sbeholder32167.oidctemplate.exception.OIDCException;
 import io.github.sbeholder32167.oidctemplate.jwks.exception.JWKSException;
 import io.github.sbeholder32167.oidctemplate.client.OIDCDataTransferObject;
@@ -74,29 +75,37 @@ public interface OIDCProvider {
     OIDCTokenTransferObject refreshTokens(final String refreshToken) throws OIDCException;
 
     /**
-     * JWKS 토큰 검증
-     * @param token ID, Access, Logout Token
-     * @param checkAud AUD Claim(Client ID) 검증 여부. Id Token만 true로 지정. Access Token은 false로 지정.
+     * JWKS 토큰 검증<br>
+     * Keycloak의 경우에는 Access Token 및 Logout Token까지 검증 가능하나, Google의 경우는 ID Token만 검증 가능.<br>
+     * @param tto ID, Access 전체 포함 객체.
      * @throws OIDCException 검증이 실패하면 발생하며, 내부적으로 {@link JWKSException}이 발생한다
      */
-    void verifyToken(final String token, final boolean checkAud) throws OIDCException;
+    void verifyToken(final OIDCTokenTransferObject tto) throws OIDCException;
+
+    /**
+     * 각 Provider에 알맞은 OIDC Tokens를 생성한다.
+     * @param tto ID, Access 전체 포함 객체.
+     * @return 각 Provider 별 OIDC Tokens 객체. 토큰과 그것을 약간 파싱한 내역.
+     * @throws RBACException 필수 Claim이 없어서 초기 식별자를 파싱하지 못하여 정상적으로 OIDC Tokens 구현체를 생성하지 경우 발생.
+     */
+    OIDCTokens generateTokens(final OIDCTokenTransferObject tto) throws RBACException;
 
     /**
      * Access Token의 만료시간을 추출<br>
      * OIDCSession Storage의 register 메서드에서 사용된다.<br>
-     * @param accessToken OIDCTokens 객체. 내부 Access Token이 있어야 한다.
+     * @param tto OIDCTokens 객체. 내부 Access Token이 있어야 한다.
      * @return Access Token 만료시각(초)
      * @throws RBACException Access Token이 null 또는 빈칸이거나 파싱 실패일 경우 던져진다
      */
-    long extractAccessTokenExpirationTime(final String accessToken) throws RBACException;
+    long extractAccessTokenExpirationTime(final OIDCTokens tto) throws RBACException;
     /**
      * Refresh Token의 만료시간을 추출<br>
      * OIDCSession Storage의 register 메서드에서 사용된다.<br>
-     * @param refreshToken OIDCTokens 객체. 내부 Refresh Token이 있어야 한다.
+     * @param tto OIDCTokens 객체. 내부 Refresh Token이 있어야 한다.
      * @return Refresh Token 만료시각(초)
      * @throws RBACException Refresh Token이 null 또는 빈칸이거나 파싱 실패일 경우 던져진다
      */
-    long extractRefreshTokenExpirationTime(final String refreshToken) throws RBACException;
+    long extractRefreshTokenExpirationTime(final OIDCTokens tto) throws RBACException;
 
     /**
      * Outbound IDP Logout을 수행한다.<br>

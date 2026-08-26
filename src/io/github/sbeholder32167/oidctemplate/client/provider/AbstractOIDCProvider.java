@@ -29,6 +29,15 @@ import io.github.sbeholder32167.oidctemplate.client.session.storage.OIDCAuthPara
  * @see io.github.sbeholder32167.oidctemplate.client.provider.impl.KeycloakProvider
  */
 public abstract class AbstractOIDCProvider implements OIDCProvider{
+    protected static final String STATE_ATTR = "OIDC_STATE";
+    protected static final String PKCE_ATTR = "PKCE_VERIFIER";
+    protected static final String NONCE_ATTR = "NONCE";
+    protected static final String ID_TOKEN = "id_token";
+    protected static final String EXPIRES_IN = "expires_in";
+    protected static final String ACCESS_TOKEN = "access_token";
+    protected static final String REFRESH_EXPIRES_IN = "refresh_expires_in";
+    protected static final String REFRESH_TOKEN = "refresh_token";
+
     protected final OIDCConfig oidcConfig;
     protected final RestfulUtil restfulUtil;
     protected final OIDCAuthParameterStorage oidcAuthParameterStorage;

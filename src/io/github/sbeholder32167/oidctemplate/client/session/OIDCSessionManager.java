@@ -131,8 +131,8 @@ public class OIDCSessionManager {
         long accessTokenExpireTimeoutSec = -1;
         long refreshTokenExpireTimeoutSec = -1;
         try{
-            accessTokenExpireTimeoutSec = this.oidcProvider.extractAccessTokenExpirationTime(tokens.getAccessToken());
-            refreshTokenExpireTimeoutSec = this.oidcProvider.extractRefreshTokenExpirationTime(tokens.getRefreshToken());
+            accessTokenExpireTimeoutSec = this.oidcProvider.extractAccessTokenExpirationTime(tokens);
+            refreshTokenExpireTimeoutSec = this.oidcProvider.extractRefreshTokenExpirationTime(tokens);
         }catch(RBACException re){
             LogUtil.error("Failed to extract Access / Refresh Token expiration timeout from tokens.", this);
         }
@@ -252,13 +252,13 @@ public class OIDCSessionManager {
         OIDCTokens targetTokens = sObj.getTokens();
         if (newAccessToken != null && !newAccessToken.isEmpty()){
             targetTokens.setAccessToken(newAccessToken);
-            long newAccessTokenExpirationTimeSec = this.oidcProvider.extractAccessTokenExpirationTime(newAccessToken);
+            long newAccessTokenExpirationTimeSec = this.oidcProvider.extractAccessTokenExpirationTime(targetTokens);
             sObj.setAccessTokenExpirationTimeSec(newAccessTokenExpirationTimeSec);
             LogUtil.info("Expiration time in new access token has been extracted successfully(Refreshed):" + newAccessTokenExpirationTimeSec, this);
         }
         if (newRefreshToken != null && !newRefreshToken.isEmpty()){
             targetTokens.setRefreshToken(newRefreshToken);
-            long refreshTokenExpirationTimeSec = this.oidcProvider.extractRefreshTokenExpirationTime(newRefreshToken);
+            long refreshTokenExpirationTimeSec = this.oidcProvider.extractRefreshTokenExpirationTime(targetTokens);
             sObj.setRefreshTokenExpirationTimeSec(refreshTokenExpirationTimeSec);
             LogUtil.info("Expiration time in new refresh token has been extracted successfully(Refreshed):" + refreshTokenExpirationTimeSec, this);
         }

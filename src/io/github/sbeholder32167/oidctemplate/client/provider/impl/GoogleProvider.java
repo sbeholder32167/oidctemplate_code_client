@@ -12,52 +12,61 @@
  */
 package io.github.sbeholder32167.oidctemplate.client.provider.impl;
 
-import com.auth0.jwt.interfaces.Claim;
 import io.github.sbeholder32167.oidctemplate.OIDCConstants;
 import io.github.sbeholder32167.oidctemplate.adapter.ClientLogoutAdapter;
+import io.github.sbeholder32167.oidctemplate.client.OIDCConfig;
+import io.github.sbeholder32167.oidctemplate.client.OIDCDataTransferObject;
+import io.github.sbeholder32167.oidctemplate.client.OIDCTokenTransferObject;
+import io.github.sbeholder32167.oidctemplate.client.exception.RBACException;
+import io.github.sbeholder32167.oidctemplate.client.provider.AbstractOIDCProvider;
 import io.github.sbeholder32167.oidctemplate.client.session.OIDCSession;
 import io.github.sbeholder32167.oidctemplate.client.session.OIDCSessionManager;
+import io.github.sbeholder32167.oidctemplate.client.session.storage.OIDCAuthParameterStorage;
 import io.github.sbeholder32167.oidctemplate.client.tokens.OIDCTokens;
-import io.github.sbeholder32167.oidctemplate.client.tokens.impl.KeycloakTokens;
+import io.github.sbeholder32167.oidctemplate.client.tokens.impl.GoogleTokens;
 import io.github.sbeholder32167.oidctemplate.exception.OIDCException;
 import io.github.sbeholder32167.oidctemplate.exception.OIDCExceptionEnum;
 import io.github.sbeholder32167.oidctemplate.jwks.RSAJWKSVerifier;
 import io.github.sbeholder32167.oidctemplate.jwks.exception.JWKSException;
-import io.github.sbeholder32167.oidctemplate.client.*;
-import io.github.sbeholder32167.oidctemplate.client.exception.RBACException;
-import io.github.sbeholder32167.oidctemplate.client.provider.AbstractOIDCProvider;
 import io.github.sbeholder32167.oidctemplate.rest.RestfulUtil;
-import io.github.sbeholder32167.oidctemplate.client.session.storage.OIDCAuthParameterStorage;
-import io.github.sbeholder32167.oidctemplate.util.KeycloakUtil;
 import io.github.sbeholder32167.oidctemplate.util.LogUtil;
 import io.github.sbeholder32167.oidctemplate.util.OIDCUtil;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.util.Map;
+import java.util.UUID;
 
 /**
- * Keycloak 인증 제공자 Class.<br>
+ * Google 인증 제공자 Class.<br>
  *
- * <p>Keycloak 인증에 필요한 동작 및 각종 Parameter와 Logic이 정의된 Class.<br>
- * Keycloak의 특성(토큰 구조, 파라미터명 등)이 반영되었다.<br></p>
+ * <p>Google 인증에 필요한 동작 및 각종 Parameter와 Logic이 정의된 Class.<br>
+ * Google의 특성(토큰 구조, 파라미터명 등)이 반영되었다.<br></p>
  *
  * @author sbeholder6684
  * @version 1.0.0
- * @since 2026-06-28
+ * @since 2026-08-18
  */
 //-- XML Bean 등록
-public class KeycloakProvider extends AbstractOIDCProvider {
-    public KeycloakProvider(final OIDCConfig config, final RestfulUtil restfulUtil,
-                            final OIDCAuthParameterStorage oidcAuthParameterStorage){
+public class GoogleProvider extends AbstractOIDCProvider {
+    protected GoogleProvider(OIDCConfig config, RestfulUtil restfulUtil, OIDCAuthParameterStorage oidcAuthParameterStorage) {
         super(config, restfulUtil, oidcAuthParameterStorage);
     }
 
+    //-- Access Type : offline / online
+    private String accessType = "online";
+    public void setAccessType(final String accessType){
+        this.accessType = accessType;
+    }
+
     @Override
-    public void redirectIDPAuthPage(HttpServletRequest request, HttpServletResponse response, final String redirectUri) throws OIDCException, IOException{
+    public void redirectIDPAuthPage(HttpServletRequest request, HttpServletResponse response, String redirectUri) throws OIDCException, IOException {
         String redirectUrl;
         if (redirectUri == null){
             redirectUrl = this.oidcConfig.getRedirectUri();
@@ -67,12 +76,19 @@ public class KeycloakProvider extends AbstractOIDCProvider {
         String sessionId = OIDCUtil.extractSessionId(request);
         String state = OIDCUtil.generateState(16);
         this.oidcAuthParameterStorage.setRequestParameter(STATE_ATTR, state, sessionId);
+        String nonce = UUID.randomUUID().toString();
+        this.oidcAuthParameterStorage.setRequestParameter(NONCE_ATTR, nonce, sessionId);
         StringBuilder builder = new StringBuilder(this.oidcConfig.getAuthenticationEndpoint());
         builder.append("?client_id=").append(this.oidcConfig.getClientId())
                 .append("&redirect_uri=").append(URLEncoder.encode(redirectUrl, "UTF-8"))
                 .append("&response_type=code")
                 .append("&scope=").append(this.oidcConfig.getScope())
-                .append("&state=").append(state);
+                .append("&state=").append(state)
+                .append("&nonce=").append(nonce);
+        //-- if needed refresh token.
+        if (accessType.equalsIgnoreCase("offline")){
+            builder.append("&access_type=offline&prompt=consent");
+        }
         if (this.oidcConfig.isUsePkce()){
             String codeVerifier = OIDCUtil.generateCodeVerifier();
             this.oidcAuthParameterStorage.setRequestParameter(PKCE_ATTR, codeVerifier, sessionId);
@@ -123,7 +139,8 @@ public class KeycloakProvider extends AbstractOIDCProvider {
         return result;
     }
 
-    public synchronized OIDCTokenTransferObject acquireTokens(OIDCDataTransferObject dto, final String redirectUri) throws OIDCException {
+    @Override
+    public OIDCTokenTransferObject acquireTokens(OIDCDataTransferObject dto, String redirectUri) throws OIDCException {
         Map<String, Object> tokenResponse = OIDCUtil.exchangeCodeForToken(
                 this.restfulUtil, this.oidcConfig,
                 dto.getCode(), dto.getCodeVerifier(), dto.getState(), dto.getSessionState(), dto.getScope(),
@@ -131,8 +148,8 @@ public class KeycloakProvider extends AbstractOIDCProvider {
         if (tokenResponse == null || tokenResponse.isEmpty()){
             throw new OIDCException(OIDCExceptionEnum.NULL_TOKEN_RESPONSE, "Null Token response.");
         }
-        if (tokenResponse.get(ACCESS_TOKEN) == null ||
-                tokenResponse.get(REFRESH_TOKEN) == null){
+        //-- Refresh token is not mandatory token in Google IDP.
+        if (!tokenResponse.containsKey(ACCESS_TOKEN)){
             throw new OIDCException(OIDCExceptionEnum.INSUFFICIENT_TOKEN, "Insufficient tokens");
         }
         OIDCTokenTransferObject result = new OIDCTokenTransferObject();
@@ -140,17 +157,24 @@ public class KeycloakProvider extends AbstractOIDCProvider {
             result.setIdToken(String.valueOf(tokenResponse.get(ID_TOKEN)));
         }
         result.setAccessToken(String.valueOf(tokenResponse.get(ACCESS_TOKEN)));
-        result.setRefreshToken(String.valueOf(tokenResponse.get(REFRESH_TOKEN)));
-        if (tokenResponse.get(EXPIRES_IN) != null){
+        if (tokenResponse.containsKey(REFRESH_TOKEN)){
+            result.setRefreshToken(String.valueOf(tokenResponse.get(REFRESH_TOKEN)));
+        }
+
+        if (tokenResponse.containsKey(EXPIRES_IN)){
             result.setExpiresIn(Integer.parseInt(String.valueOf(tokenResponse.get(EXPIRES_IN))));
         }
-        if (tokenResponse.get(REFRESH_EXPIRES_IN) != null){
+        if (tokenResponse.containsKey(REFRESH_EXPIRES_IN)){
             result.setRefreshExpiresIn(Integer.parseInt(String.valueOf(tokenResponse.get(REFRESH_EXPIRES_IN))));
         }
         return result;
     }
 
     public synchronized OIDCTokenTransferObject refreshTokens(final String refreshToken) throws OIDCException {
+        if (refreshToken == null || refreshToken.isEmpty()){
+            LogUtil.info("Not available refresh token.", this);
+            throw new OIDCException(OIDCExceptionEnum.INSUFFICIENT_TOKEN, "Not available refresh token.");
+        }
         Map<String, Object> tokenResponse = OIDCUtil.refreshToken(this.restfulUtil, this.oidcConfig, refreshToken);
         if (tokenResponse == null || tokenResponse.isEmpty()){
             throw new OIDCException(OIDCExceptionEnum.NULL_TOKEN_RESPONSE, "Null Token response.");
@@ -182,7 +206,6 @@ public class KeycloakProvider extends AbstractOIDCProvider {
     public void verifyToken(final OIDCTokenTransferObject tto) throws OIDCException {
         try{
             RSAJWKSVerifier.verifyToken(this.restfulUtil, this.oidcConfig.getJwksUri(), tto.getIdToken(), this.oidcConfig.getClientId());
-            RSAJWKSVerifier.verifyToken(this.restfulUtil, this.oidcConfig.getJwksUri(), tto.getAccessToken(), null);
         }catch(JWKSException je){
             throw new OIDCException(OIDCExceptionEnum.VERIFY_TOKEN, "JWKS Error:" + je.step.name() + "-" +  je.getMessage());
         }
@@ -190,49 +213,29 @@ public class KeycloakProvider extends AbstractOIDCProvider {
 
     @Override
     public OIDCTokens generateTokens(final OIDCTokenTransferObject tto) throws RBACException{
-        return new KeycloakTokens(tto);
+        return new GoogleTokens(tto);
     }
 
     @Override
     public long extractAccessTokenExpirationTime(final OIDCTokens tokens) throws RBACException {
-        //-- Extract expiration time for access token.
-        Map<String, Claim> accessTokenMap = OIDCUtil.parseJwtPayload(tokens.getAccessToken());
-        if (accessTokenMap == null){
-            throw new RBACException("Invalid Access Token.");
-        }
-        //-- Set default AccessTokenExpirationTime.
-        long accessTokenExpireTimeoutSec = (System.currentTimeMillis() / 1000) + this.defaultAccessTokenDurationSec;
-        Claim expClaim = accessTokenMap.get("exp");
-        if (expClaim != null){
-            accessTokenExpireTimeoutSec = expClaim.asLong();
-            LogUtil.info("Expiration time extracted successfully.(Register):" + accessTokenExpireTimeoutSec, this);
-        }
-        return accessTokenExpireTimeoutSec;
+        long currentTimeSec = System.currentTimeMillis() / 1000;
+        return currentTimeSec + tokens.getTokenTransferObj().getExpiresIn();
     }
 
     @Override
     public long extractRefreshTokenExpirationTime(final OIDCTokens tokens) throws RBACException {
         //-- Extract expiration time for refresh token.
-        Map<String, Claim> refreshTokenMap = OIDCUtil.parseJwtPayload(tokens.getRefreshToken());
-        if (refreshTokenMap == null){
-            throw new RBACException("Invalid Refresh Token.");
+        if (tokens.getRefreshToken() == null || tokens.getRefreshToken().isEmpty()){
+            return -1;
         }
-        long refreshTokenExpireTimeoutSec = (System.currentTimeMillis() / 1000) + this.defaultRefreshTokenDurationSec;
-        Claim refTypClaim = refreshTokenMap.get("typ");
-        Claim refExpClaim = refreshTokenMap.get("exp");
-        if (refTypClaim != null && refExpClaim != null){
-            if (refTypClaim.asString().equalsIgnoreCase("OFFLINE")){
-                refreshTokenExpireTimeoutSec = Long.MAX_VALUE;
-            }else{
-                refreshTokenExpireTimeoutSec = refExpClaim.asLong();
-            }
-        }
-        return refreshTokenExpireTimeoutSec;
+        long currentTimeSec = System.currentTimeMillis() / 1000;
+        return currentTimeSec + tokens.getTokenTransferObj().getRefreshExpiresIn();
     }
+
 
     /**
      * Outbound IDP Logout을 수행한다.<br>
-     * Keycloak의 경우 IDP의 Logout URI로의 Redirect가 수행된다.<br>
+     * Google의 경우 IDP 로그아웃 기능이 없으므로, 토큰만 취소처리한다.<br>
      * @param request 서블릿 요청 객체
      * @param response 서블릿 응답 객체
      * @param oidcSessionManager OIDC 세션 관리자. 내부 OIDC Logout을 수행하기 위해 필요.
@@ -250,19 +253,17 @@ public class KeycloakProvider extends AbstractOIDCProvider {
         if (sObj == null) {
             throw new OIDCException(OIDCExceptionEnum.OIDC_SESSION_EXCEPTION, "Not found session.");
         }
+        //-- Google Provider의 경우 Token revoke만 존재
+        this.revokeToken(sObj.getTokens().getAccessToken());
+        if (sObj.getTokens().getRefreshToken() != null && !sObj.getTokens().getRefreshToken().isEmpty()){
+            this.revokeToken(sObj.getTokens().getRefreshToken());
+        }
         //-- invalidate OIDC Session and legacy Session.
         OIDCUtil.doLogout(sObj.getSid(), request, response, oidcSessionManager,clientLogoutAdapter,true);
+
         // NOSONAR String postLogoutRedirectUrl = OIDCUtil.buildFullUrl(request, this.oidcConfig.getPostLogoutUri());
         String postLogoutRedirectUrl = this.oidcConfig.getPostLogoutUri();
-        String idTokenHint = sObj.getTokens().getIDToken();
-        if (idTokenHint == null || idTokenHint.isEmpty()) {
-            LogUtil.error("Id Token Not found.", this);
-            throw new OIDCException(OIDCExceptionEnum.INSUFFICIENT_TOKEN, "Not found ID token.");
-        }
-        String logoutUri = this.oidcConfig.getLogoutUri() + "?client_id=" + this.oidcConfig.getClientId() +
-                "&post_logout_redirect_uri=" + postLogoutRedirectUrl +
-                "&id_token_hint=" + idTokenHint;
-        response.sendRedirect(logoutUri);
+        response.sendRedirect(postLogoutRedirectUrl);
     }
 
     /**
@@ -277,37 +278,29 @@ public class KeycloakProvider extends AbstractOIDCProvider {
     @Override
     public void doInboundIDPLogout(HttpServletRequest request, HttpServletResponse response,
                                    OIDCSessionManager oidcSessionManager, ClientLogoutAdapter clientLogoutAdapter) throws OIDCException{
-        if (request.getMethod().equals(HttpMethod.POST.name())) {
-            //-- process IDP Back Channel logout.
-            //-- Back Channel logout.
-            String logoutToken = request.getParameter("logout_token");
-            if (logoutToken == null){
-                LogUtil.error("No logout token received.", this);
-                throw new OIDCException(OIDCExceptionEnum.NULL_LOGOUT_TOKEN, "No logout token");
-            }
-            RSAJWKSVerifier.verifyToken(this.restfulUtil, this.oidcConfig.getJwksUri(), logoutToken, null);
-            String sid = KeycloakUtil.extractSidFromLogoutToken(logoutToken);
-            if (oidcSessionManager.getSessionBySID(sid) == null){
-                LogUtil.info("[" + sid + "] Already logged out.", this);
+        /* Not implemented : Google Provider는 IDP 동시 Logout Order를 내리지 않는다. */
+    }
+
+    /**
+     * 토큰 취소 처리
+     * @param token Access Token ,Refresh Token.
+     */
+    private void revokeToken(final String token){
+        HttpHeaders httpHeaders = new HttpHeaders();
+        httpHeaders.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        String paramStr = "token=" + token;
+        ResponseEntity<Map> responseEntity = this.restfulUtil.doRestfulRawString(this.oidcConfig.getLogoutUri(), HttpMethod.POST ,httpHeaders, paramStr, Map.class);
+        if(responseEntity.getStatusCode().value() != 200){
+            Map body = responseEntity.getBody();
+            if (body != null){
+                String errorStr = String.valueOf(body.get("error"));
+                String errorDescStr = String.valueOf(body.get("error_description"));
+                LogUtil.error("Error:" + errorStr + " " + errorDescStr, this);
             }else{
-                OIDCUtil.doLogout(sid, request, response,oidcSessionManager,clientLogoutAdapter,false);
-                LogUtil.info("OIDC Session and client Session has been removed successfully.(Lazy)", this);
+                LogUtil.error("Error:" + responseEntity.getStatusCode().value(), this);
             }
-        } else if (request.getMethod().equals(HttpMethod.GET.name())) {
-            //-- process IDP Front Channel logout. Not recommended because there is no source verification.
-            //-- Front Channel logout.
-            String sid = request.getParameter("sid");
-            if (sid == null){
-                throw new OIDCException(OIDCExceptionEnum.NULL_LOGOUT_TOKEN, "No SID in front channel logout msg.");
-            }
-            if (oidcSessionManager.getSessionBySID(sid) == null){
-                LogUtil.info("[" + sid + "] Already logged out.", this);
-            }else{
-                OIDCUtil.doLogout(sid, request, response,oidcSessionManager,clientLogoutAdapter,false);
-                LogUtil.info("OIDC Session and client Session has been removed successfully.(Lazy)", this);
-            }
-        } else {
-            LogUtil.error("Not supported method:" + request.getMethod(), this);
+        }else{
+            LogUtil.info("The token has been revoked successfully.", this);
         }
     }
 }

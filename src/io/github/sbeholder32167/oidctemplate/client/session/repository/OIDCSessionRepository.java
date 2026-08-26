@@ -12,10 +12,7 @@
  */
 package io.github.sbeholder32167.oidctemplate.client.session.repository;
 
-import io.github.sbeholder32167.oidctemplate.exception.OIDCException;
 import io.github.sbeholder32167.oidctemplate.client.session.OIDCSession;
-
-import java.util.Collection;
 
 /**
  * OIDC Session Repository 추상 Class.<br>

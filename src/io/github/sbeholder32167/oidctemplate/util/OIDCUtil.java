@@ -27,6 +27,7 @@ import io.github.sbeholder32167.oidctemplate.rest.RestfulUtil;
 import io.github.sbeholder32167.oidctemplate.client.session.OIDCSession;
 import io.github.sbeholder32167.oidctemplate.client.session.OIDCSessionManager;
 import org.springframework.http.*;
+import org.springframework.util.Base64Utils;
 
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
@@ -36,7 +37,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
-import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -55,10 +55,12 @@ public class OIDCUtil {
      * State를 생성한다.
      * @return State 문자열
      */
-    public static String generateState() {
-        byte[] randomBytes = new byte[16];
+    public static String generateState(final int length) {
+        byte[] randomBytes = new byte[length];
         secureRandom.nextBytes(randomBytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+        //return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+        //-- Under JDK 1.8
+        return Base64Utils.encodeToUrlSafeString(randomBytes).replaceAll("=+$", "");
     }
     /**
      * URI 패스를 기반으로 완전한 URL 주소를 빌드
@@ -92,7 +94,9 @@ public class OIDCUtil {
     public static String generateCodeVerifier() {
         byte[] codeVerifier = new byte[32]; // 32바이트의 난수 생성
         secureRandom.nextBytes(codeVerifier);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(codeVerifier);
+        //return Base64.getUrlEncoder().withoutPadding().encodeToString(codeVerifier);
+        //-- Under JDK 1.8
+        return Base64Utils.encodeToUrlSafeString(codeVerifier).replaceAll("=+$", "");
     }
 
     /**
@@ -104,7 +108,9 @@ public class OIDCUtil {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hash = digest.digest(codeVerifier.getBytes(StandardCharsets.UTF_8));
-            return Base64.getUrlEncoder().withoutPadding().encodeToString(hash);
+            //return Base64.getUrlEncoder().withoutPadding().encodeToString(hash);
+            //-- Under JDK 1.8
+            return Base64Utils.encodeToUrlSafeString(hash).replaceAll("=+$", "");
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256", e);
         }
@@ -145,8 +151,8 @@ public class OIDCUtil {
      * @return JWKS 검증이 되지 않은 토큰<br>id_token, access_token, refresh_token<br>Nullable
      */
     public static Map<String, Object> exchangeCodeForToken(final RestfulUtil restUtil, final OIDCConfig config,
-                                                     String code, String codeVerifier, String state,
-                                                     String sessionState, String scope, String redirectUri) {
+                                                           String code, String codeVerifier, String state,
+                                                           String sessionState, String scope, String redirectUri) {
         //-- Access Token과 idToken을 받아온다..
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
@@ -274,13 +280,13 @@ public class OIDCUtil {
                 LogUtil.error( "Auto token refresh has been failed. No Access Token", OIDCUtil.class.getName());
             }else{
                 tObj.setAccessToken(tto.getAccessToken());
-                long newTokenExpirationTimeSec = oidcProvider.extractAccessTokenExpirationTime(tto.getAccessToken());
+                long newTokenExpirationTimeSec = oidcProvider.extractAccessTokenExpirationTime(tObj);
                 oidcSession.setAccessTokenExpirationTimeSec(newTokenExpirationTimeSec);
                 LogUtil.info("Expiration time extracted successfully(Auto Refreshed):" + newTokenExpirationTimeSec, OIDCUtil.class.getName());
             }
             if (tto.getRefreshToken() != null && !tto.getRefreshToken().isEmpty()){
                 tObj.setRefreshToken(tto.getRefreshToken());
-                long newTokenExpirationTimeSec = oidcProvider.extractRefreshTokenExpirationTime(tto.getRefreshToken());
+                long newTokenExpirationTimeSec = oidcProvider.extractRefreshTokenExpirationTime(tObj);
                 oidcSession.setRefreshTokenExpirationTimeSec(newTokenExpirationTimeSec);
                 LogUtil.info("Expiration time in Refresh token extracted successfully(Auto Refreshed):" + newTokenExpirationTimeSec, OIDCUtil.class.getName());
             }

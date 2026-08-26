@@ -22,7 +22,6 @@ import io.github.sbeholder32167.oidctemplate.client.OIDCTokenTransferObject;
 import io.github.sbeholder32167.oidctemplate.client.exception.RBACException;
 import io.github.sbeholder32167.oidctemplate.client.provider.OIDCProvider;
 import io.github.sbeholder32167.oidctemplate.client.tokens.OIDCTokens;
-import io.github.sbeholder32167.oidctemplate.client.tokens.impl.KeycloakTokens;
 import io.github.sbeholder32167.oidctemplate.client.session.OIDCSessionManager;
 import io.github.sbeholder32167.oidctemplate.util.LogUtil;
 import io.github.sbeholder32167.oidctemplate.util.OIDCUtil;
@@ -182,10 +181,9 @@ public class OIDCLoginFilter extends GenericFilterBean {
                 return null;
             }
 
-            //-- Token verify process (JWKS, aud)
+            //-- Token verify process (JWKS)
             try{
-                this.oidcProvider.verifyToken(tto.getIdToken(), true);
-                this.oidcProvider.verifyToken(tto.getAccessToken(), false);
+                this.oidcProvider.verifyToken(tto);
             } catch (OIDCException e) {
                 LogUtil.error("JWKS Error:" + e.getStep().name() + "-" + e.getMessage(), this);
                 if (this.exceptionHandler != null){
@@ -196,7 +194,7 @@ public class OIDCLoginFilter extends GenericFilterBean {
             LogUtil.info("Token verifying has been completed successfully.", this);
 
             try {
-                OIDCTokens oidcTokens = new KeycloakTokens(tto);
+                OIDCTokens oidcTokens = this.oidcProvider.generateTokens(tto);
                 Object legacySessionObj = this.authConvertAdapter.buildAuthenticationUsingToken(tto);
                 return new OIDCAuthObj(oidcTokens, legacySessionObj);
             } catch (RBACException e) {

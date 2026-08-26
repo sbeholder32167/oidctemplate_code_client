@@ -20,7 +20,6 @@ import io.github.sbeholder32167.oidctemplate.client.OIDCTokenTransferObject;
 import io.github.sbeholder32167.oidctemplate.client.exception.RBACException;
 import io.github.sbeholder32167.oidctemplate.client.provider.OIDCProvider;
 import io.github.sbeholder32167.oidctemplate.client.tokens.OIDCTokens;
-import io.github.sbeholder32167.oidctemplate.client.tokens.impl.KeycloakTokens;
 import io.github.sbeholder32167.oidctemplate.client.session.OIDCSessionManager;
 import io.github.sbeholder32167.oidctemplate.util.LogUtil;
 import org.springframework.security.authentication.AuthenticationProvider;
@@ -82,35 +81,38 @@ public class OIDCAuthenticationProvider implements AuthenticationProvider {
             throw new InsufficientAuthenticationException("Null token response.");
         }
 
-        //-- Token verify process (JWKS, aud)
+        //-- Token verify process (JWKS)
         try{
-            this.oidcProvider.verifyToken(tto.getIdToken(), true);
-            this.oidcProvider.verifyToken(tto.getAccessToken(), false);
+            this.oidcProvider.verifyToken(tto);
         } catch (OIDCException e) {
             LogUtil.error("JWKS Error:" + e.getStep().name() + "-" + e.getMessage(), this);
             throw new BadCredentialsException("Token verify failed.");
         }
 
-        //-- OIDC Session Register
+        //-- Convert(Wrap) to authentication Object from Token Transfer Object.
+        Object resultAuthentication;
         try {
-            OIDCTokens oidcTokens = new KeycloakTokens(tto);
+            resultAuthentication = this.clientAuthConvertAdapter.buildAuthenticationUsingToken(tto);
+            if (!(resultAuthentication instanceof Authentication)){
+                LogUtil.error("Converter has Not implemented correctly.", this);
+                throw new AuthenticationServiceException("Converter has Not implemented correctly.");
+            }
+        } catch (RBACException e) {
+            LogUtil.error(e.getMessage(), this);
+            throw new AuthenticationServiceException(e.getLocalizedMessage());
+        }
+
+        //-- OIDC Session Register
+        OIDCTokens oidcTokens;
+        try {
+            oidcTokens = this.oidcProvider.generateTokens(tto);
             this.oidcSessionManager.registerOIDCSession(oidcTokens.getSid(), dto.getSessionId(), oidcTokens);
         }catch(OIDCException oe){
             //-- Session duplicate.
             LogUtil.error("Session Duplicate:" + oe.getMessage(), this);
             throw new SessionAuthenticationException(oe.getLocalizedMessage());
         }
-
-        //-- Convert(Wrap) to authentication Object from Token Transfer Object.
-        try {
-            Object resultAuthentication = this.clientAuthConvertAdapter.buildAuthenticationUsingToken(tto);
-            if (!(resultAuthentication instanceof Authentication)){
-                throw new AuthenticationServiceException("Converter has Not implemented correctly.");
-            }
-            return (Authentication)resultAuthentication;
-        } catch (RBACException e) {
-            throw new AuthenticationServiceException(e.getLocalizedMessage());
-        }
+        return (Authentication)resultAuthentication;
     }
 
     @Override

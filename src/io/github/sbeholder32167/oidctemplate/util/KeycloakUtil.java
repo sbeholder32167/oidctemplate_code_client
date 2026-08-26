@@ -21,7 +21,6 @@ import org.springframework.http.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * Keycloak IDP 전용 Utility 메서드 모음.<br>
@@ -136,8 +135,6 @@ public class KeycloakUtil {
         if (response.getStatusCode() == HttpStatus.OK || response.getStatusCode() == HttpStatus.NO_CONTENT){
             LogUtil.info("IDP Logout successfully.", KeycloakUtil.class.getName());
         }else{
-            //LogUtil.info("IDP Logout:" + response.getStatusCodeValue(), KeycloakUtil.class.getName());
-            //-- Under JDK 1.8
             LogUtil.info("IDP Logout:" + response.getStatusCode().value(), KeycloakUtil.class.getName());
         }
     }
