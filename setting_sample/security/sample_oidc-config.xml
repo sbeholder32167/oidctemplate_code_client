@@ -29,11 +29,9 @@
             <property name="logoutUri" value="https://keycloak-idp:8443/realms/Demonstration/protocol/openid-connect/logout" />
             <property name="postLogoutUri" value="http://localhost:8080/Legacy/account/login.do" />
             <property name="scope" value="openid profile email"/>
-            <!-- Factory Pattern화에 필요한 항목으로서 현재는 의미없음 -->
             <property name="provider" value="KEYCLOAK"/>
         </bean>
-        <!-- OIDC Request Parameter Storage -->
-        <bean id="OIDCRequestParameterStorage" class="io.github.sbeholder32167.oidctemplate.client.session.storage.impl.LocalMemoryAuthParameterStorage" />
+
         <!-- OIDC Keycloak Provider -->
         <bean id="OIDCProvider" class="io.github.sbeholder32167.oidctemplate.client.provider.impl.KeycloakProvider">
             <constructor-arg index="0" ref="OIDCConfig" />
@@ -43,6 +41,8 @@
             <property name="defaultRefreshTokenDurationSec" value="1800" />
         </bean>
 
+        <!-- OIDC Request Parameter Storage -->
+        <bean id="OIDCRequestParameterStorage" class="io.github.sbeholder32167.oidctemplate.client.session.storage.impl.LocalMemoryAuthParameterStorage" />
         <!-- OIDC Session Duplicate Policy -->
         <bean id="OIDCSessionDuplicatePolicy" class="io.github.sbeholder32167.oidctemplate.client.session.duplicatepolicy.impl.MaxDenySessionDuplicatePolicy">
             <property name="maxSessionCnt" value="1" />

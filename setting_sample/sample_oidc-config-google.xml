@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:mvc="http://www.springframework.org/schema/mvc"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.0.xsd
+       http://www.springframework.org/schema/mvc http://www.springframework.org/schema/mvc/spring-mvc-4.0.xsd">
+
+    <!-- OIDC Config Bean -->
+    <bean id="OIDCConfig" class="io.github.sbeholder32167.oidctemplate.client.OIDCConfig">
+        <property name="clientId" value="[Client-ID]" />
+        <property name="clientSecret" value="[Client-Secret]"/>
+        <property name="redirectUri" value="http://localhost:8080/legacy/account/oidc_code.do" />
+        <property name="authenticationEndpoint" value="https://accounts.google.com/o/oauth2/v2/auth" />
+        <property name="tokenEndpoint" value="https://oauth2.googleapis.com/token" />
+        <property name="jwksUri" value="https://www.googleapis.com/oauth2/v3/certs"/>
+        <property name="logoutUri" value="https://oauth2.googleapis.com/revoke" />
+        <property name="postLogoutUri" value="http://localhost:8080/legacy/account/login.do" />
+        <property name="scope" value="openid profile email"/>
+        <property name="provider" value="GOOGLE"/>
+    </bean>
+
+    <!-- OIDC Google Provider -->
+    <bean id="OIDCProvider" class="io.github.sbeholder32167.oidctemplate.client.provider.impl.GoogleProvider">
+        <constructor-arg index="0" ref="OIDCConfig" />
+        <constructor-arg index="1" ref="restfulUtil" />
+        <constructor-arg index="2" ref="OIDCRequestParameterStorage" />
+        <property name="defaultAccessTokenDurationSec" value="300" />
+        <property name="defaultRefreshTokenDurationSec" value="1800" />
+        <!-- Specific option for Google Provider -->
+        <property name="accessType" value="offline" />
+    </bean>
+
+    <!-- OIDC Login/Logout Adapters : CUSTOMIZING AREA -->
+    <bean id="clientLoginAdapter" class="com.example.legacy.adapter.LegacyLoginAdapterImpl"/>
+    <bean id="clientLogoutAdapter" class="com.example.legacy.adapter.LegacyLogoutAdapterImpl"/>
+    <!-- must be implemented Google Adapter -->
+    <bean id="clientAuthConvertAdapter" class="com.example.legacy.adapter.LegacyAuthGoogleConvertAdapterImpl"/>
+    <bean id="OIDCExceptionHandler" class="com.example.legacy.adapter.LegacyOIDCExceptionHandlerImpl" />
+    <bean id="clientLegacySessionAdapter" class="com.example.legacy.adapter.LegacySessionAdapterImpl" />
+
+</beans>

@@ -23,7 +23,7 @@
     - **Custom Filter 방식**: Custom Filter, Provider, AuthSuccessHandler 조합(Spring Security 사용 여부에 따라 구성 가능).
     - **Controller Template 방식**: 인증 로직이 Controller Endpoint로 구현되어, Filter 적용이 어려운 환경에서 사용 가능.
 - **침습 최소화**: 기존 인증 로직을 건드리지 않고, Custom 인증 로직을 '추가'하는 방식으로 설계되었습니다.
-- **Boilerplate 코드 제공**: Jar 배포 방식이 아닌 소스 코드 제공 방식으로, 환경에 맞춰 유연하게 수정 및 통합이 가능합니다.
+- **Template 코드 제공**: Jar 배포 방식이 아닌 소스 코드 제공 방식으로, 환경에 맞춰 유연하게 수정 및 통합이 가능합니다.
 - **추상화된 Adapter 인터페이스**: 세션 핸들링, 로그인/로그아웃 후속 처리 등 커스터마이징이 필수인 부분을 인터페이스로 분리하였습니다.
 - **유연한 세션 관리**: 기본 LocalMap 구현체 제공 및 클러스터링 환경을 위한 Redis/ehCache 등 세션 공유 저장소로 교체 가능.
 
