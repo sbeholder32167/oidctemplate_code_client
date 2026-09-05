@@ -19,17 +19,15 @@
        http://www.springframework.org/schema/mvc http://www.springframework.org/schema/mvc/spring-mvc-4.0.xsd">
     
         <!-- OIDC Config Bean --> <!-- Customize Setting -->
-        <bean id="OIDCConfig" class="io.github.sbeholder32167.oidctemplate.client.OIDCConfig">
+        <bean id="OIDCConfig" class="io.github.sbeholder32167.oidctemplate.client.config.impl.KeycloakConfig">
+            <constructor-arg index="0" ref="restfulUtil" />
+            <constructor-arg index="1" value="https://keycloak-idp:8443" />
+            <constructor-arg index="2" value="Demonstration" />
             <property name="clientId" value="[Client-ID]" />
             <property name="clientSecret" value="[Client-Secret]"/>
             <property name="redirectUri" value="http://localhost:8080/Legacy/account/oidc_code.do" />
-            <property name="authenticationEndpoint" value="https://keycloak-idp:8443/realms/Demonstration/protocol/openid-connect/auth" />
-            <property name="tokenEndpoint" value="https://keycloak-idp:8443/realms/Demonstration/protocol/openid-connect/token" />
-            <property name="jwksUri" value="https://keycloak-idp:8443/realms/Demonstration/protocol/openid-connect/certs"/>
-            <property name="logoutUri" value="https://keycloak-idp:8443/realms/Demonstration/protocol/openid-connect/logout" />
-            <property name="postLogoutUri" value="http://localhost:8080/Legacy/account/login.do" />
             <property name="scope" value="openid profile email"/>
-            <property name="provider" value="KEYCLOAK"/>
+            <property name="postLogoutUri" value="http://localhost:8080/Legacy/account/login.do" />
         </bean>
 
         <!-- OIDC Keycloak Provider -->
@@ -89,6 +87,7 @@
         <!-- OIDC Login/Logout Adapters : CUSTOMIZING AREA -->
         <bean id="clientLoginAdapter" class="com.example.legacy.adapter.LegacyLoginAdapterImpl"/>
         <bean id="clientLogoutAdapter" class="com.example.legacy.adapter.LegacyLogoutAdapterImpl"/>
+        <!-- IMPORTANT : must be implemented Keycloak Adapter -->
         <bean id="clientAuthConvertAdapter" class="com.example.legacy.adapter.LegacyAuthConvertAdapterImpl"/>
         <bean id="OIDCExceptionHandler" class="com.example.legacy.adapter.LegacyOIDCExceptionHandlerImpl" />
         <bean id="clientLegacySessionAdapter" class="com.example.legacy.adapter.LegacySessionAdapterImpl" />

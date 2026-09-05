@@ -45,16 +45,21 @@ import java.util.Map;
  * <p>RSA 알고리즘으로 JWKS 검증하는 로직이 구현된 Class.</p>
  *
  * @author sbeholder6684
- * @version 1.0.1
+ * @version 1.0.2
  * @since 2026-05-26
  */
 public class RSAJWKSVerifier {
     private RSAJWKSVerifier(){}
+
     /**
      * 토큰을 검증한다.<br>
      * HS512 알고리즘의 Refresh Token은 검증 대상이 아님.<br>
      * 오로지 RSA 만 검증할수 있으므로 참고.<br>
-     * 주의 : Keycloak IDP에서만 테스트됨.<br>
+     * Public Key 생성 시 Key Algorithm을 Keyset과 비교한다.<br><br>
+     * Keycloak Test 2025-11-02.<br>
+     * Google Test 2026-08-20.<br>
+     * Naver Test 2026-09-05.<br>
+     *
      * @since 2025-11-02<br>
      * @param restUtil RestFulUtil 객체.
      * @param jwksEndpoint Keycloak Certification의 URL String.
@@ -63,7 +68,28 @@ public class RSAJWKSVerifier {
      * @exception JWKSException JWKS 단계의 모든 부분에서 예외를 이 방식으로 던진다.
      */
     public static void verifyToken(final RestfulUtil restUtil, final String jwksEndpoint,
-                                      final String token, final String clientId) throws JWKSException {
+                                   final String token, final String clientId) throws JWKSException{
+        verifyToken(restUtil, jwksEndpoint, token, clientId, false);
+    }
+    /**
+     * 토큰을 검증한다.<br>
+     * HS512 알고리즘의 Refresh Token은 검증 대상이 아님.<br>
+     * 오로지 RSA 만 검증할수 있으므로 참고.<br>
+     * <br><br>
+     * Keycloak Test 2025-11-02.<br>
+     * Google Test 2026-08-20.<br>
+     * Naver Test 2026-09-05.<br>
+     *
+     * @since 2025-11-02<br>
+     * @param restUtil RestFulUtil 객체.
+     * @param jwksEndpoint Keycloak Certification의 URL String.
+     * @param token AccessToken을 의미. IDToken의 유효성도 검증할수는 있긴 하다.
+     * @param clientId Audience값과 비교하고 싶다면 clientId를 넣을것. 비교하기 싫다면 null을 넣으면 된다.
+     * @param skipCheckAlg Header의 Algorithm과 Key Set의 Algorithm 비교 로직을 건너뛴다.
+     * @exception JWKSException JWKS 단계의 모든 부분에서 예외를 이 방식으로 던진다.
+     */
+    public static void verifyToken(final RestfulUtil restUtil, final String jwksEndpoint,
+                                      final String token, final String clientId, boolean skipCheckAlg) throws JWKSException {
         //-- check Signature Algorithm..
         DecodedJWT decodedTkn;
         try{
@@ -89,6 +115,10 @@ public class RSAJWKSVerifier {
         List<Object> rootLst = queryJWKS(restUtil, jwksEndpoint);
         if (rootLst == null){
             throw new JWKSException(JWKSErrorEnum.NO_KEYS, "Null JWKS Keys.");
+        }
+        if (skipCheckAlg) {
+            //-- to parse Naver JWKS as omitted alg claim.
+            checkKeysList(rootLst, algStr);
         }
         PublicKey pk = findCertsInKeyList(rootLst, algStr, keyId);
         if (pk == null){
@@ -179,7 +209,7 @@ public class RSAJWKSVerifier {
         for (Object o : keyList){
             @SuppressWarnings("unchecked")
             Map<String, Object> el = (Map<String, Object>)o;
-            if (el != null && el.get("alg") != null && String.valueOf(el.get("alg")).equals(algorithm)){
+            if (el != null && el.containsKey("alg") && String.valueOf(el.get("alg")).equals(algorithm)){
                 if (el.get("x5c") != null){
                     @SuppressWarnings("unchecked")
                     List<String> certCoverLst = (List<String>) el.get("x5c");
@@ -232,6 +262,22 @@ public class RSAJWKSVerifier {
             return keyFactory.generatePublic(spec);
         } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
             throw new JWKSException(JWKSErrorEnum.GEN_CERTS_ERR, e.getLocalizedMessage());
+        }
+    }
+
+    /**
+     * Naver의 JWKS Claim 차이로 인해 추가한 메서드<br>
+     * 사용을 권장하지는 않지만, Naver Provider에 한하여 적용.<br>
+     * @param keyList JWKS Key Set.
+     * @param algorithm Algorithm
+     */
+    private static void checkKeysList(List<Object> keyList, final String algorithm){
+        for (Object o : keyList) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> el = (Map<String, Object>) o;
+            if (!el.containsKey("alg")){
+                el.put("alg", algorithm);
+            }
         }
     }
 }

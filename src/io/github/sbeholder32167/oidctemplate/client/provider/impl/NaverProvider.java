@@ -14,16 +14,16 @@ package io.github.sbeholder32167.oidctemplate.client.provider.impl;
 
 import io.github.sbeholder32167.oidctemplate.OIDCConstants;
 import io.github.sbeholder32167.oidctemplate.adapter.ClientLogoutAdapter;
-import io.github.sbeholder32167.oidctemplate.client.config.OIDCConfig;
 import io.github.sbeholder32167.oidctemplate.client.OIDCDataTransferObject;
 import io.github.sbeholder32167.oidctemplate.client.OIDCTokenTransferObject;
+import io.github.sbeholder32167.oidctemplate.client.config.OIDCConfig;
 import io.github.sbeholder32167.oidctemplate.client.exception.RBACException;
 import io.github.sbeholder32167.oidctemplate.client.provider.AbstractOIDCProvider;
 import io.github.sbeholder32167.oidctemplate.client.session.OIDCSession;
 import io.github.sbeholder32167.oidctemplate.client.session.OIDCSessionManager;
 import io.github.sbeholder32167.oidctemplate.client.session.storage.OIDCAuthParameterStorage;
 import io.github.sbeholder32167.oidctemplate.client.tokens.OIDCTokens;
-import io.github.sbeholder32167.oidctemplate.client.tokens.impl.GoogleTokens;
+import io.github.sbeholder32167.oidctemplate.client.tokens.impl.NaverTokens;
 import io.github.sbeholder32167.oidctemplate.exception.OIDCException;
 import io.github.sbeholder32167.oidctemplate.exception.OIDCExceptionEnum;
 import io.github.sbeholder32167.oidctemplate.jwks.RSAJWKSVerifier;
@@ -40,29 +40,24 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.net.URLEncoder;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
 /**
- * Google 인증 제공자 Class.<br>
+ * Naver 인증 제공자 Class.<br>
  *
- * <p>Google 인증에 필요한 동작 및 각종 Parameter와 Logic이 정의된 Class.<br>
- * Google의 특성(토큰 구조, 파라미터명 등)이 반영되었다.<br></p>
+ * <p>Naver Social Login에 필요한 동작 및 각종 Parameter와 Logic이 정의된 Class.<br>
+ * Naver 특성(토큰 구조, 파라미터명 등)이 반영되었다.<br></p>
  *
  * @author sbeholder6684
  * @version 1.0.0
- * @since 2026-08-18
+ * @since 2026-09-03
  */
 //-- XML Bean 등록
-public class GoogleProvider extends AbstractOIDCProvider {
-    public GoogleProvider(OIDCConfig config, RestfulUtil restfulUtil, OIDCAuthParameterStorage oidcAuthParameterStorage) {
+public class NaverProvider extends AbstractOIDCProvider {
+    public NaverProvider(OIDCConfig config, RestfulUtil restfulUtil, OIDCAuthParameterStorage oidcAuthParameterStorage) {
         super(config, restfulUtil, oidcAuthParameterStorage);
-    }
-
-    //-- Access Type : offline / online
-    private String accessType = "online";
-    public void setAccessType(final String accessType){
-        this.accessType = accessType;
     }
 
     @Override
@@ -85,10 +80,6 @@ public class GoogleProvider extends AbstractOIDCProvider {
                 .append("&scope=").append(this.oidcConfig.getScope())
                 .append("&state=").append(state)
                 .append("&nonce=").append(nonce);
-        //-- if needed refresh token.
-        if (accessType.equalsIgnoreCase("offline")){
-            builder.append("&access_type=offline&prompt=consent");
-        }
         if (this.oidcConfig.isUsePkce()){
             String codeVerifier = OIDCUtil.generateCodeVerifier();
             this.oidcAuthParameterStorage.setRequestParameter(PKCE_ATTR, codeVerifier, sessionId);
@@ -106,7 +97,6 @@ public class GoogleProvider extends AbstractOIDCProvider {
     public OIDCDataTransferObject checkParameters(HttpServletRequest request) throws OIDCException {
         String state = request.getParameter("state");
         String code = request.getParameter("code");
-        String sessionState = request.getParameter("session_state");
         String sessionId = OIDCUtil.extractSessionId(request);
         String savedState = String.valueOf(this.oidcAuthParameterStorage.getRequestParameterValue(STATE_ATTR, true, sessionId));
         String codeVerifier = String.valueOf(this.oidcAuthParameterStorage.getRequestParameterValue(PKCE_ATTR, true, sessionId));
@@ -133,7 +123,7 @@ public class GoogleProvider extends AbstractOIDCProvider {
         result.setCode(code);
         result.setScope(scope);
         result.setCodeVerifier(codeVerifier);
-        result.setSessionState(sessionState);
+        result.setSessionState("");
         //-- 만약 보안을 위해 Session을 refresh할 경우, 여기서 session Id를 넣는 것은 무의미하다.
         // NOSONAR result.setSessionId(sessionId);
         return result;
@@ -143,17 +133,16 @@ public class GoogleProvider extends AbstractOIDCProvider {
     public OIDCTokenTransferObject acquireTokens(OIDCDataTransferObject dto, String redirectUri) throws OIDCException {
         Map<String, Object> tokenResponse = OIDCUtil.exchangeCodeForToken(
                 this.restfulUtil, this.oidcConfig,
-                dto.getCode(), dto.getCodeVerifier(), dto.getState(), dto.getSessionState(), dto.getScope(),
+                dto.getCode(), dto.getCodeVerifier(), dto.getState(), "", dto.getScope(),
                 redirectUri);
         if (tokenResponse == null || tokenResponse.isEmpty()){
             throw new OIDCException(OIDCExceptionEnum.NULL_TOKEN_RESPONSE, "Null Token response.");
         }
-        //-- Refresh token is not mandatory token in Google IDP.
         if (!tokenResponse.containsKey(ACCESS_TOKEN)){
             throw new OIDCException(OIDCExceptionEnum.INSUFFICIENT_TOKEN, "Insufficient tokens");
         }
         OIDCTokenTransferObject result = new OIDCTokenTransferObject();
-        if (tokenResponse.get(ID_TOKEN) != null && !String.valueOf(tokenResponse.get(ID_TOKEN)).isEmpty()){
+        if (tokenResponse.containsKey(ID_TOKEN) && !String.valueOf(tokenResponse.get(ID_TOKEN)).isEmpty()){
             result.setIdToken(String.valueOf(tokenResponse.get(ID_TOKEN)));
         }
         result.setAccessToken(String.valueOf(tokenResponse.get(ACCESS_TOKEN)));
@@ -166,11 +155,15 @@ public class GoogleProvider extends AbstractOIDCProvider {
         }
         if (tokenResponse.containsKey(REFRESH_EXPIRES_IN)){
             result.setRefreshExpiresIn(Integer.parseInt(String.valueOf(tokenResponse.get(REFRESH_EXPIRES_IN))));
+        }else{
+            //-- 90 days as Naver Refresh Token life span.
+            result.setRefreshExpiresIn(86400 * 90);
         }
         return result;
     }
 
-    public synchronized OIDCTokenTransferObject refreshTokens(final String refreshToken) throws OIDCException {
+    @Override
+    public OIDCTokenTransferObject refreshTokens(String refreshToken) throws OIDCException {
         if (refreshToken == null || refreshToken.isEmpty()){
             LogUtil.info("Not available refresh token.", this);
             throw new OIDCException(OIDCExceptionEnum.INSUFFICIENT_TOKEN, "Not available refresh token.");
@@ -179,55 +172,42 @@ public class GoogleProvider extends AbstractOIDCProvider {
         if (tokenResponse == null || tokenResponse.isEmpty()){
             throw new OIDCException(OIDCExceptionEnum.NULL_TOKEN_RESPONSE, "Null Token response.");
         }
-        if (tokenResponse.get(ACCESS_TOKEN) == null){
+        if (!tokenResponse.containsKey(ACCESS_TOKEN) || !tokenResponse.containsKey(EXPIRES_IN)){
             throw new OIDCException(OIDCExceptionEnum.INSUFFICIENT_TOKEN, "Insufficient tokens");
         }
         OIDCTokenTransferObject result = new OIDCTokenTransferObject();
-        if (tokenResponse.get(ID_TOKEN) != null && !String.valueOf(tokenResponse.get(ID_TOKEN)).isEmpty()){
-            result.setIdToken(String.valueOf(tokenResponse.get(ID_TOKEN)));
-        }
         result.setAccessToken(String.valueOf(tokenResponse.get(ACCESS_TOKEN)));
-        if (tokenResponse.get(REFRESH_TOKEN) != null && !String.valueOf(tokenResponse.get(REFRESH_TOKEN)).isEmpty()){
-            result.setRefreshToken(String.valueOf(tokenResponse.get(REFRESH_TOKEN)));
-        }else{
-            result.setRefreshToken(refreshToken);
-            LogUtil.info("Old refresh token will be reused.", this);
-        }
-        if (tokenResponse.get(EXPIRES_IN) != null){
-            result.setExpiresIn(Integer.parseInt(String.valueOf(tokenResponse.get(EXPIRES_IN))));
-        }
-        if (tokenResponse.get(REFRESH_EXPIRES_IN) != null){
-            result.setRefreshExpiresIn(Integer.parseInt(String.valueOf(tokenResponse.get(REFRESH_EXPIRES_IN))));
-        }
+        result.setExpiresIn(Integer.parseInt(String.valueOf(tokenResponse.get(EXPIRES_IN))));
+        //-- not refreshing Refresh token.
+        LogUtil.info("Old refresh token will be reused.", this);
         return result;
     }
 
     @Override
-    public void verifyToken(final OIDCTokenTransferObject tto) throws OIDCException {
+    public void verifyToken(OIDCTokenTransferObject tto) throws OIDCException {
         try{
-            RSAJWKSVerifier.verifyToken(this.restfulUtil, this.oidcConfig.getJwksUri(), tto.getIdToken(), this.oidcConfig.getClientId());
+            //-- Key Set에 alg Claim이 없는 특이한 형태. 그래서 alg Check를 Skip.
+            RSAJWKSVerifier.verifyToken(this.restfulUtil, this.oidcConfig.getJwksUri(), tto.getIdToken(), this.oidcConfig.getClientId(), true);
         }catch(JWKSException je){
             throw new OIDCException(OIDCExceptionEnum.VERIFY_TOKEN, "JWKS Error:" + je.step.name() + "-" +  je.getMessage());
         }
     }
 
     @Override
-    public OIDCTokens generateTokens(final OIDCTokenTransferObject tto) throws RBACException{
-        return new GoogleTokens(tto);
+    public OIDCTokens generateTokens(OIDCTokenTransferObject tto) throws RBACException {
+        return new NaverTokens(tto);
     }
 
     @Override
     public void doOutboundIDPLogout(HttpServletRequest request, HttpServletResponse response,
                                     OIDCSessionManager oidcSessionManager, ClientLogoutAdapter clientLogoutAdapter) throws OIDCException, IOException{
-        //-- process manual IDP logout.
-        //-- 사용자에 의한 직접적인 Outbound Logout은 세션의 쿠키가 유지됨.
+        //-- Naver는 IDP 동시 Logout을 지원하지 않음. Naver Works는 가능.
         String sessionId = OIDCUtil.getCookieValue(request, OIDCConstants.COOKIE_NAME);
         OIDCSession sObj = oidcSessionManager.getSessionBySessionID(sessionId);
         if (sObj == null) {
             throw new OIDCException(OIDCExceptionEnum.OIDC_SESSION_EXCEPTION, "Not found session.");
         }
-        //-- Google Provider의 경우 Token revoke만 존재
-        //-- Access Token or Refresh Token 하나만 폐기해줘도 된다. 오히려 두가지 모두 호출하는 것이 400 Error 를 발생.
+        //-- Naver Provider의 경우 Token revoke만 존재
         this.revokeToken(sObj.getTokens().getAccessToken(), "access_token");
         if (sObj.getTokens().getRefreshToken() != null && !sObj.getTokens().getRefreshToken().isEmpty()){
             this.revokeToken(sObj.getTokens().getRefreshToken(), "refresh_token");
@@ -243,18 +223,22 @@ public class GoogleProvider extends AbstractOIDCProvider {
     @Override
     public void doInboundIDPLogout(HttpServletRequest request, HttpServletResponse response,
                                    OIDCSessionManager oidcSessionManager, ClientLogoutAdapter clientLogoutAdapter) throws OIDCException{
-        /* Not implemented : Google Provider는 IDP 동시 Logout Order를 내리지 않는다. */
+        /* Not implemented : Naver Provider는 IDP 동시 Logout Order를 내리지 않는다. */
     }
 
     /**
      * 토큰 취소 처리
      * @param token Access Token ,Refresh Token.
      */
-    private void revokeToken(final String token, final String tokenTypeHint){
+    private void revokeToken(final String token, final String token_type_hint){
         HttpHeaders httpHeaders = new HttpHeaders();
         httpHeaders.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-        String paramStr = "token=" + token + "&token_type_hint=" + tokenTypeHint;
-        ResponseEntity<Map> responseEntity = this.restfulUtil.doRestfulRawString(this.oidcConfig.getRevokeEndpoint(), HttpMethod.POST ,httpHeaders, paramStr, Map.class);
+        Map<String, String> bodyParam = new HashMap<String, String>();
+        bodyParam.put("token", token);
+        bodyParam.put("token_type_hint", token_type_hint);
+        bodyParam.put("client_id", this.oidcConfig.getClientId());
+        bodyParam.put("client_secret", this.oidcConfig.getClientSecret());
+        ResponseEntity<Map> responseEntity = this.restfulUtil.doRestful(this.oidcConfig.getRevokeEndpoint(), HttpMethod.POST ,httpHeaders, bodyParam, Map.class);
         if(responseEntity.getStatusCode().value() != 200){
             Map body = responseEntity.getBody();
             if (body != null){

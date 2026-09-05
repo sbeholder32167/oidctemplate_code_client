@@ -13,7 +13,7 @@
 package io.github.sbeholder32167.oidctemplate.util;
 
 import com.auth0.jwt.interfaces.Claim;
-import io.github.sbeholder32167.oidctemplate.client.OIDCConfig;
+import io.github.sbeholder32167.oidctemplate.client.config.OIDCConfig;
 import io.github.sbeholder32167.oidctemplate.client.tokens.OIDCTokens;
 import io.github.sbeholder32167.oidctemplate.rest.RestfulUtil;
 import org.springframework.http.*;

@@ -19,7 +19,7 @@ import io.github.sbeholder32167.oidctemplate.client.nonsecurity.OIDCAuthFailureH
 import io.github.sbeholder32167.oidctemplate.client.nonsecurity.OIDCAuthSuccessHandler;
 import io.github.sbeholder32167.oidctemplate.exception.OIDCException;
 import io.github.sbeholder32167.oidctemplate.exception.OIDCExceptionEnum;
-import io.github.sbeholder32167.oidctemplate.client.OIDCConfig;
+import io.github.sbeholder32167.oidctemplate.client.config.OIDCConfig;
 import io.github.sbeholder32167.oidctemplate.client.OIDCDataTransferObject;
 import io.github.sbeholder32167.oidctemplate.client.OIDCTokenTransferObject;
 import io.github.sbeholder32167.oidctemplate.client.tokens.OIDCTokens;

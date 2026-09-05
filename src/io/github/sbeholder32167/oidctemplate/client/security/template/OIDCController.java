@@ -19,7 +19,7 @@ import io.github.sbeholder32167.oidctemplate.client.security.OIDCAuthFailureHand
 import io.github.sbeholder32167.oidctemplate.client.security.OIDCAuthSuccessHandler;
 import io.github.sbeholder32167.oidctemplate.exception.OIDCException;
 import io.github.sbeholder32167.oidctemplate.exception.OIDCExceptionEnum;
-import io.github.sbeholder32167.oidctemplate.client.OIDCConfig;
+import io.github.sbeholder32167.oidctemplate.client.config.OIDCConfig;
 import io.github.sbeholder32167.oidctemplate.client.OIDCDataTransferObject;
 import io.github.sbeholder32167.oidctemplate.client.OIDCTokenTransferObject;
 import io.github.sbeholder32167.oidctemplate.client.tokens.OIDCTokens;
@@ -235,7 +235,7 @@ public class OIDCController implements OIDCEndpointsInterface {
      */
     @Override
     @RequestMapping("/oidc_template_s/manual_logout.do")
-    public void doLogoutManually(HttpServletRequest request, HttpServletResponse response){
+    public void doLogoutManually(HttpServletRequest request, HttpServletResponse response) throws IOException {
         try {
             this.provider.doOutboundIDPLogout(request, response, this.sessionManager, this.logoutAdapter);
         } catch (OIDCException | IOException e) {

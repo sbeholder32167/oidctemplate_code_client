@@ -19,7 +19,7 @@ import io.github.sbeholder32167.oidctemplate.OIDCConstants;
 import io.github.sbeholder32167.oidctemplate.adapter.ClientLogoutAdapter;
 import io.github.sbeholder32167.oidctemplate.exception.OIDCException;
 import io.github.sbeholder32167.oidctemplate.exception.OIDCExceptionEnum;
-import io.github.sbeholder32167.oidctemplate.client.OIDCConfig;
+import io.github.sbeholder32167.oidctemplate.client.config.OIDCConfig;
 import io.github.sbeholder32167.oidctemplate.client.OIDCTokenTransferObject;
 import io.github.sbeholder32167.oidctemplate.client.tokens.OIDCTokens;
 import io.github.sbeholder32167.oidctemplate.client.provider.OIDCProvider;
@@ -151,15 +151,17 @@ public class OIDCUtil {
      * @return JWKS 검증이 되지 않은 토큰<br>id_token, access_token, refresh_token<br>Nullable
      */
     public static Map<String, Object> exchangeCodeForToken(final RestfulUtil restUtil, final OIDCConfig config,
-                                                           String code, String codeVerifier, String state,
-                                                           String sessionState, String scope, String redirectUri) {
+                                                     String code, String codeVerifier, String state,
+                                                     String sessionState, String scope, String redirectUri) {
         //-- Access Token과 idToken을 받아온다..
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
         Map<String, String> bodyParams = new HashMap<>();
         bodyParams.put("grant_type","authorization_code");
         bodyParams.put("code",code);
-        bodyParams.put("session_state",sessionState);
+        if (sessionState != null && !sessionState.isEmpty()){
+            bodyParams.put("session_state",sessionState);
+        }
         bodyParams.put("state",state);
         bodyParams.put("client_id", config.getClientId());
         bodyParams.put("client_secret",config.getClientSecret());
@@ -206,7 +208,7 @@ public class OIDCUtil {
         ResponseEntity<Map> response = restUtil.doRestful(tokenEndpoint, HttpMethod.POST, headers, bodyParams, Map.class);
         HttpStatus resCode = response.getStatusCode();
         if (resCode == HttpStatus.OK){
-            Map<String, Object> result = new HashMap<>();
+            Map<String, Object> result = new HashMap<String, Object>();
             for(Object rawK : response.getBody().keySet()){
                 result.put(String.valueOf(rawK), response.getBody().get(rawK));
             }
@@ -323,5 +325,54 @@ public class OIDCUtil {
             }
         }
         return targetCookieValue;
+    }
+
+    /**
+     * Access Token으로 보호되는 Endpoint에 접근<br>
+     * @param restUtil Restful Object
+     * @param uri Target URI
+     * @param accessToken Access Token
+     * @param method Http Method (GET, POST)
+     * @param param Body Parameters
+     * @param resultClass Result Class
+     * @return Spring ResponseEntity를 그대로 리턴.
+     * @param <T> 템플릿
+     */
+    public static <T> ResponseEntity<T> queryAPI(RestfulUtil restUtil, final String uri, final String accessToken,
+                                               HttpMethod method, Map<String, String> param, Class<T> resultClass){
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        headers.set("Authorization", "Bearer " + accessToken);
+        Map<String, String> tMap = param;
+        if (tMap == null){
+            tMap = new HashMap<String, String>();
+        }
+        return restUtil.doRestful(uri, method, headers, tMap, resultClass);
+    }
+
+    /**
+     * Access Token으로 보호되는 Endpoint에 접근<br>
+     * OIDCUtil.queryAPI 메서드의 편의성 Wrapper.<br>
+     * @param restUtil Restful Object
+     * @param uri Target URI
+     * @param accessToken Access Token
+     * @param method Http Method (GET, POST)
+     * @param param Body Parameters
+     * @return Map으로 변환된 값을 리턴.
+     */
+    public static Map<String, Object> queryAPIbyMap(RestfulUtil restUtil, final String uri, final String accessToken,
+                                                    HttpMethod method, Map<String, String> param){
+        ResponseEntity<Map> response = queryAPI(restUtil, uri, accessToken, method, param, Map.class);
+        HttpStatus resCode = response.getStatusCode();
+        if (resCode == HttpStatus.OK){
+            Map<String, Object> result = new HashMap<String, Object>();
+            for(Object rawK : response.getBody().keySet()){
+                result.put(String.valueOf(rawK), response.getBody().get(rawK));
+            }
+            return result;
+        }else{
+            LogUtil.error("failed(queryAPIbyMap):" + resCode.value(), OIDCUtil.class.getName());
+            return null;
+        }
     }
 }

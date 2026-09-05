@@ -6,31 +6,29 @@
        http://www.springframework.org/schema/mvc http://www.springframework.org/schema/mvc/spring-mvc-4.0.xsd">
 
     <!-- OIDC Config Bean -->
-    <bean id="OIDCConfig" class="io.github.sbeholder32167.oidctemplate.client.config.impl.GoogleConfig">
+    <bean id="OIDCConfig" class="io.github.sbeholder32167.oidctemplate.client.config.impl.NaverConfig">
         <constructor-arg index="0" ref="restfulUtil" />
         <property name="clientId" value="[Client-ID]" />
         <property name="clientSecret" value="[Client-Secret]"/>
         <property name="redirectUri" value="http://localhost:8080/legacy/account/oidc_code.do" />
-        <property name="scope" value="openid profile email"/>
+        <property name="scope" value="openid"/>
         <property name="postLogoutUri" value="http://localhost:8080/legacy/account/login.do" />
     </bean>
 
-    <!-- OIDC Google Provider -->
-    <bean id="OIDCProvider" class="io.github.sbeholder32167.oidctemplate.client.provider.impl.GoogleProvider">
+    <!-- OIDC Naver Provider -->
+    <bean id="OIDCProvider" class="io.github.sbeholder32167.oidctemplate.client.provider.impl.NaverProvider">
         <constructor-arg index="0" ref="OIDCConfig" />
         <constructor-arg index="1" ref="restfulUtil" />
         <constructor-arg index="2" ref="OIDCRequestParameterStorage" />
         <property name="defaultAccessTokenDurationSec" value="300" />
         <property name="defaultRefreshTokenDurationSec" value="1800" />
-        <!-- Specific option for Google Provider -->
-        <property name="accessType" value="offline" />
     </bean>
 
     <!-- OIDC Login/Logout Adapters : CUSTOMIZING AREA -->
     <bean id="clientLoginAdapter" class="com.example.legacy.adapter.LegacyLoginAdapterImpl"/>
     <bean id="clientLogoutAdapter" class="com.example.legacy.adapter.LegacyLogoutAdapterImpl"/>
-    <!-- IMPORTANT : must be implemented Google Adapter -->
-    <bean id="clientAuthConvertAdapter" class="com.example.legacy.adapter.LegacyAuthGoogleConvertAdapterImpl"/>
+    <!-- IMPORTANT : must be implemented Naver Adapter -->
+    <bean id="clientAuthConvertAdapter" class="com.example.legacy.adapter.LegacyAuthNaverConvertAdapterImpl"/>
     <bean id="OIDCExceptionHandler" class="com.example.legacy.adapter.LegacyOIDCExceptionHandlerImpl" />
     <bean id="clientLegacySessionAdapter" class="com.example.legacy.adapter.LegacySessionAdapterImpl" />
 
