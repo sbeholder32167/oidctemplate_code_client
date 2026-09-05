@@ -23,6 +23,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.Base64Utils;
 
 import java.io.ByteArrayInputStream;
 import java.math.BigInteger;
@@ -89,7 +90,7 @@ public class RSAJWKSVerifier {
      * @exception JWKSException JWKS 단계의 모든 부분에서 예외를 이 방식으로 던진다.
      */
     public static void verifyToken(final RestfulUtil restUtil, final String jwksEndpoint,
-                                      final String token, final String clientId, boolean skipCheckAlg) throws JWKSException {
+                                   final String token, final String clientId, boolean skipCheckAlg) throws JWKSException {
         //-- check Signature Algorithm..
         DecodedJWT decodedTkn;
         try{
@@ -239,7 +240,9 @@ public class RSAJWKSVerifier {
     private static PublicKey getPublicKeyFromX5c(final String x5cStr) throws JWKSException{
         try {
             CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
-            byte[] decodedCerts = Base64.getDecoder().decode(x5cStr);
+            //byte[] decodedCerts = Base64.getDecoder().decode(x5cStr);
+            //-- Under JDK 1.8
+            byte[] decodedCerts = Base64Utils.decodeFromString(x5cStr);
             X509Certificate certificate = (X509Certificate) certFactory.generateCertificate(new ByteArrayInputStream(decodedCerts));
             return certificate.getPublicKey();
         }catch(CertificateException ce){
@@ -248,8 +251,11 @@ public class RSAJWKSVerifier {
     }
     private static PublicKey getPublicKeyFromJwk(final String nStr, final String eStr) throws JWKSException{
         //-- decode Base64URL.
-        byte[] nBytes = Base64.getUrlDecoder().decode(nStr);
-        byte[] eBytes = Base64.getUrlDecoder().decode(eStr);
+        //byte[] nBytes = Base64.getUrlDecoder().decode(nStr);
+        //byte[] eBytes = Base64.getUrlDecoder().decode(eStr);
+        //-- Under JDK 1.8
+        byte[] nBytes = Base64Utils.decodeFromString(nStr);
+        byte[] eBytes = Base64Utils.decodeFromString(eStr);
 
         //-- convert to BigInteger.
         BigInteger modulus = new BigInteger(1, nBytes);
