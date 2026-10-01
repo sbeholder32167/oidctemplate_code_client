@@ -74,5 +74,13 @@ To avoid "dependency hell," this code is provided as **Template source code**. Y
 
 ---
 
+## 📼 Demonstration Videos.
+
+- This is a video demonstrating the operation of this example.
+   - https://www.youtube.com/watch?v=9FGOm5OUjVU
+- This video demonstrates RBAC functionality using Keycloak's authorization features.  (requires OIDC Template Code-Authz Package)
+   - https://www.youtube.com/watch?v=mgiVfoCt6gc
+
+---
 ## 📧 Paid Technical Support
 - **Email**: sbeholder6684@gmail.com (in South Korea only.)
