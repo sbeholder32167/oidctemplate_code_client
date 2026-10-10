@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:mvc="http://www.springframework.org/schema/mvc"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.0.xsd
+       http://www.springframework.org/schema/mvc http://www.springframework.org/schema/mvc/spring-mvc-4.0.xsd">
+
+    <!-- OIDC Config Bean -->
+    <bean id="OIDCConfig" class="io.github.sbeholder32167.oidctemplate.client.config.impl.KakaoConfig">
+        <constructor-arg index="0" ref="restfulUtil" />
+        <property name="clientId" value="[Client-Id]" />
+        <property name="clientSecret" value="[Client-Secret]"/>
+        <property name="redirectUri" value="http://localhost:8080/legacy/account/oidc_code.do" />
+        <property name="scope" value="openid,profile_nickname"/>
+        <!-- Inbound logout URI : must be same with idpLogoutUri property in OIDCLogoutFilter Bean -->
+        <property name="inboundLogoutUri" value="http://localhost:8080/legacy/account/logout.do" />
+        <property name="postLogoutUri" value="http://localhost:8080/legacy/account/login.do" />
+    </bean>
+
+    <!-- OIDC Naver Provider -->
+    <bean id="OIDCProvider" class="io.github.sbeholder32167.oidctemplate.client.provider.impl.KakaoProvider">
+        <constructor-arg index="0" ref="OIDCConfig" />
+        <constructor-arg index="1" ref="restfulUtil" />
+        <constructor-arg index="2" ref="OIDCRequestParameterStorage" />
+        <property name="defaultAccessTokenDurationSec" value="300" />
+        <property name="defaultRefreshTokenDurationSec" value="1800" />
+    </bean>
+
+    <!-- OIDC Login/Logout Adapters : CUSTOMIZING AREA -->
+    <bean id="clientLoginAdapter" class="com.example.legacy.adapter.LegacyLoginAdapterImpl"/>
+    <bean id="clientLogoutAdapter" class="com.example.legacy.adapter.LegacyLogoutAdapterImpl"/>
+    <!-- IMPORTANT : must be implemented Kakao Adapter -->
+    <bean id="clientAuthConvertAdapter" class="com.example.legacy.adapter.LegacyAuthKakaoConvertAdapterImpl"/>
+    <bean id="OIDCExceptionHandler" class="com.example.legacy.adapter.LegacyOIDCExceptionHandlerImpl" />
+    <bean id="clientLegacySessionAdapter" class="com.example.legacy.adapter.LegacySessionAdapterImpl" />
+
+</beans>
