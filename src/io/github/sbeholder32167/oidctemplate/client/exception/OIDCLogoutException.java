@@ -10,35 +10,19 @@
  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  See the License for the specific language governing permissions and limitations under the License.
  */
-package io.github.sbeholder32167.oidctemplate.exception;
+package io.github.sbeholder32167.oidctemplate.client.exception;
 
 /**
- * OIDC 예외 Class에서 사용되는 예외발생 위치 목록.<br>
+ * Logout 동작 중 예외 정의<br>
+ *
+ * <p>Logout 동작 진행 중 발생하는 예외와 원인에 대해 정의.</p>
  *
  * @author sbeholder6684
  * @version 1.0.0
- * @since 2026-05-22
-*/
-public enum OIDCExceptionEnum {
-    RBAC,ABAC,
-    IDP_AUTH_REDIRECT,
-    CHECK_PARAMETERS,
-    CHECK_STATE,
-    NULL_CODE_DTO,
-    NULL_TOKEN_RESPONSE,
-    INSUFFICIENT_TOKEN,
-    VERIFY_TOKEN,
-
-    NULL_SESSION_ID,
-    OIDC_SESSION_TIMED_OUT,
-    NO_SESSION_ADAPTER,
-
-    REFRESH_ACCESS_TOKEN,
-    OIDC_SESSION_EXCEPTION,
-    REQ_SESSION_EXCEPTION,
-    OIDC_SESSION_DUPLICATE,
-
-    IDP_LOGOUT_EXCEPTION,
-    NULL_LOGOUT_TOKEN,
-    INVALID_LOGOUT_TOKEN
+ * @since 2026-10-09
+ */
+public class OIDCLogoutException extends AuthenticationCodeFlowException {
+    public OIDCLogoutException(Cause expCause, String message) {
+        super(Step.LOGOUT, expCause, message);
+    }
 }

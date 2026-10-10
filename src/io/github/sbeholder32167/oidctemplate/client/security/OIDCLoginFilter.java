@@ -12,9 +12,10 @@
  */
 package io.github.sbeholder32167.oidctemplate.client.security;
 
-import io.github.sbeholder32167.oidctemplate.exception.OIDCException;
+import io.github.sbeholder32167.oidctemplate.client.exception.AuthenticationCodeFlowException;
+import io.github.sbeholder32167.oidctemplate.client.exception.NoWasSessionException;
 import io.github.sbeholder32167.oidctemplate.client.OIDCDataTransferObject;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCExceptionHandler;
+import io.github.sbeholder32167.oidctemplate.adapter.ClientOIDCExceptionAdapter;
 import io.github.sbeholder32167.oidctemplate.client.provider.OIDCProvider;
 import io.github.sbeholder32167.oidctemplate.util.LogUtil;
 import io.github.sbeholder32167.oidctemplate.util.OIDCUtil;
@@ -58,8 +59,8 @@ public class OIDCLoginFilter extends AbstractAuthenticationProcessingFilter{
         this.oidcProvider = oidcProvider;
     }
 
-    private OIDCExceptionHandler exceptionHandler;
-    public void setExceptionHandler(final OIDCExceptionHandler exceptionHandler){
+    private ClientOIDCExceptionAdapter exceptionHandler;
+    public void setExceptionHandler(final ClientOIDCExceptionAdapter exceptionHandler){
         this.exceptionHandler = exceptionHandler;
     }
 
@@ -70,10 +71,10 @@ public class OIDCLoginFilter extends AbstractAuthenticationProcessingFilter{
             //-- Entry Logic
             try {
                 this.oidcProvider.redirectIDPAuthPage(request, response, this.redirectUri);
-            }catch(OIDCException oe){
-                LogUtil.error(oe.getLocalizedMessage(), this);
+            }catch(AuthenticationCodeFlowException acfe){
+                LogUtil.error(acfe.getLocalizedMessage(), this);
                 if (this.exceptionHandler != null){
-                    this.exceptionHandler.handleException(oe.getStep(), oe, request, response);
+                    this.exceptionHandler.handleException(acfe, request, response);
                 }
             }
             return null;
@@ -82,10 +83,10 @@ public class OIDCLoginFilter extends AbstractAuthenticationProcessingFilter{
             OIDCDataTransferObject dto;
             try {
                 dto = this.oidcProvider.checkParameters(request);
-            }catch(OIDCException oe){
-                LogUtil.error(oe.getLocalizedMessage(), this);
+            }catch(AuthenticationCodeFlowException acfe){
+                LogUtil.error(acfe.getLocalizedMessage(), this);
                 if (this.exceptionHandler != null){
-                    this.exceptionHandler.handleException(oe.getStep(), oe, request, response);
+                    this.exceptionHandler.handleException(acfe, request, response);
                 }
                 return null;
             }
@@ -94,8 +95,8 @@ public class OIDCLoginFilter extends AbstractAuthenticationProcessingFilter{
             String sessionId;
             try {
                 sessionId = OIDCUtil.extractSessionId(request);
-            } catch (OIDCException e) {
-                LogUtil.error(e.getLocalizedMessage(), this);
+            } catch (NoWasSessionException ne) {
+                LogUtil.error(ne.getLocalizedMessage(), this);
                 return null;
             }
             dto.setSessionId(sessionId);

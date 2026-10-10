@@ -14,7 +14,7 @@ package io.github.sbeholder32167.oidctemplate.client.tokens.impl;
 
 import com.auth0.jwt.interfaces.Claim;
 import io.github.sbeholder32167.oidctemplate.client.OIDCTokenTransferObject;
-import io.github.sbeholder32167.oidctemplate.client.exception.RBACException;
+import io.github.sbeholder32167.oidctemplate.client.exception.TokenProcessingException;
 import io.github.sbeholder32167.oidctemplate.client.tokens.OIDCTokens;
 import io.github.sbeholder32167.oidctemplate.util.LogUtil;
 import io.github.sbeholder32167.oidctemplate.util.OIDCUtil;
@@ -33,22 +33,22 @@ import java.util.Map;
  * @since 2026-06-28
  */
 public class KeycloakTokens extends OIDCTokens {
-    public KeycloakTokens(OIDCTokenTransferObject tto) throws RBACException {
+    public KeycloakTokens(OIDCTokenTransferObject tto) throws TokenProcessingException {
         super(tto);
     }
 
     @Override
-    protected void parseSidIdentifier() throws RBACException {
+    protected void parseSidIdentifier() throws TokenProcessingException {
         //-- Extract SID from ID Token.
         Map<String, Claim> idTokenClaims = OIDCUtil.parseJwtPayload(this.tto.getIdToken());
         if (idTokenClaims == null || idTokenClaims.get("sid") == null ||
                 idTokenClaims.get("sid").asString() == null || idTokenClaims.get("sid").asString().isEmpty()){
             LogUtil.error("OIDC Session Id is null.",this);
-            throw new RBACException("OIDC Session Id is null.");
+            throw new TokenProcessingException("OIDC Session Id is null.");
         }
         this.sid = idTokenClaims.get("sid").asString();
         if (idTokenClaims.get("preferred_username") == null){
-            throw new RBACException("User Id is null.");
+            throw new TokenProcessingException("User Id is null.");
         }
         this.identifier = idTokenClaims.get("preferred_username").asString();
     }

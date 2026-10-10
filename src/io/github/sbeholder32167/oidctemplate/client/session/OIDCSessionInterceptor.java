@@ -13,9 +13,8 @@
 package io.github.sbeholder32167.oidctemplate.client.session;
 
 import io.github.sbeholder32167.oidctemplate.OIDCConstants;
+import io.github.sbeholder32167.oidctemplate.client.exception.OIDCSessionTimeoutException;
 import io.github.sbeholder32167.oidctemplate.client.session.storage.OIDCAuthParameterStorage;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCException;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCExceptionEnum;
 import io.github.sbeholder32167.oidctemplate.util.LogUtil;
 import io.github.sbeholder32167.oidctemplate.util.OIDCUtil;
 import org.springframework.web.servlet.HandlerInterceptor;
@@ -95,11 +94,10 @@ public class OIDCSessionInterceptor implements HandlerInterceptor {
                 // NOSONAR LogUtil.info("Session Extended:" + sessionAdapter.getSessionId(), this);
                 try {
                     this.oidcSessionManager.maintainSession(sObj);
-                }catch (OIDCException oe){
-                    if (oe.getStep() == OIDCExceptionEnum.OIDC_SESSION_TIMED_OUT){
-                        response.sendRedirect(request.getContextPath() + this.exceptionUri);
-                        return false;
-                    }
+                }catch (OIDCSessionTimeoutException oe){
+                    LogUtil.error("Session time out:" + oe.getMessage(), this);
+                    response.sendRedirect(request.getContextPath() + this.exceptionUri);
+                    return false;
                 }
                 return true;
             }

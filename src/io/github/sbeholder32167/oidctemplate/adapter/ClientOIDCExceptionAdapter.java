@@ -10,7 +10,9 @@
  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  See the License for the specific language governing permissions and limitations under the License.
  */
-package io.github.sbeholder32167.oidctemplate.exception;
+package io.github.sbeholder32167.oidctemplate.adapter;
+
+import io.github.sbeholder32167.oidctemplate.client.exception.OIDCException;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -26,13 +28,12 @@ import javax.servlet.http.HttpServletResponse;
  * @version 1.0.0
  * @since 2026-05-22
  */
-public interface OIDCExceptionHandler {
+public interface ClientOIDCExceptionAdapter {
     /**
      * 예외 처리
-     * @param step 예외 발생 단계.
-     * @param e 예외 객체. 단, step과 다를 수 있음.
+     * @param oe 예외 객체. 단, step과 다를 수 있음.
      * @param request 서블릿 요청 객체.
      * @param response 서블릿 응답 객체. Redirect를 위한 Parameter.
      */
-    void handleException(OIDCExceptionEnum step, Exception e, HttpServletRequest request, HttpServletResponse response);
+    void handleException(OIDCException oe, HttpServletRequest request, HttpServletResponse response);
 }

@@ -12,7 +12,8 @@
  */
 package io.github.sbeholder32167.oidctemplate.client.session.duplicatepolicy.impl;
 
-import io.github.sbeholder32167.oidctemplate.client.exception.RBACException;
+import io.github.sbeholder32167.oidctemplate.client.exception.OIDCSessionDuplicateException;
+import io.github.sbeholder32167.oidctemplate.client.exception.OIDCSessionException;
 import io.github.sbeholder32167.oidctemplate.client.session.duplicatepolicy.OIDCSessionDuplicatePolicy;
 import io.github.sbeholder32167.oidctemplate.client.session.registry.OIDCSessionRegistry;
 import io.github.sbeholder32167.oidctemplate.util.LogUtil;
@@ -38,10 +39,10 @@ public class MaxDenySessionDuplicatePolicy implements OIDCSessionDuplicatePolicy
     }
 
     @Override
-    public void onDuplicateOIDCSession(Object duplicateCheckKey, OIDCSessionRegistry sessionRegistry) throws RBACException {
+    public void onDuplicateOIDCSession(Object duplicateCheckKey, OIDCSessionRegistry sessionRegistry) throws OIDCSessionDuplicateException {
         LogUtil.info("Session Policy : Maximum Deny. (Limit:" + this.maxSessionCnt + ")", this);
         if (this.maxSessionCnt <= sessionRegistry.getDuplicatedSessionCount(duplicateCheckKey)){
-            throw new RBACException("Maximum Session duplicate count reached.");
+            throw new OIDCSessionDuplicateException("Maximum Session duplicate count reached.");
         }
     }
 }

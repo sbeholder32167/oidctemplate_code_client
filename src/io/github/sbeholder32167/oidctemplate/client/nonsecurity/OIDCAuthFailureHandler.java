@@ -13,7 +13,7 @@
 package io.github.sbeholder32167.oidctemplate.client.nonsecurity;
 
 import io.github.sbeholder32167.oidctemplate.adapter.ClientLoginAdapter;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCException;
+import io.github.sbeholder32167.oidctemplate.client.exception.OIDCException;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;

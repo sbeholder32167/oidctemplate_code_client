@@ -13,13 +13,11 @@
 package io.github.sbeholder32167.oidctemplate.client.session;
 
 import io.github.sbeholder32167.oidctemplate.adapter.ClientLegacySessionAdapter;
+import io.github.sbeholder32167.oidctemplate.client.exception.*;
 import io.github.sbeholder32167.oidctemplate.client.provider.OIDCProvider;
 import io.github.sbeholder32167.oidctemplate.client.session.refresh.OIDCAutoTokenChecker;
 import io.github.sbeholder32167.oidctemplate.client.session.refresh.impl.IdpTimeoutAutoTokenChecker;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCException;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCExceptionEnum;
 import io.github.sbeholder32167.oidctemplate.client.tokens.OIDCTokens;
-import io.github.sbeholder32167.oidctemplate.client.exception.RBACException;
 import io.github.sbeholder32167.oidctemplate.client.session.duplicatepolicy.OIDCSessionDuplicatePolicy;
 import io.github.sbeholder32167.oidctemplate.client.session.registry.OIDCSessionRegistry;
 import io.github.sbeholder32167.oidctemplate.client.session.storage.OIDCAuthParameterStorage;
@@ -116,16 +114,12 @@ public class OIDCSessionManager {
      * @param sid ID Token의 SID Claim
      * @param sessionId 요청 객체의 세션 ID. JSESSIONID를 사용할 경우 request.getSession().getId()
      * @param tokens 인증 객체
-     * @throws OIDCException 세션 중복에 따른 예외
+     * @throws OIDCSessionDuplicateException 세션 중복에 따른 예외
      */
-    public synchronized void registerOIDCSession(final String sid, final String sessionId, OIDCTokens tokens) throws OIDCException{
+    public synchronized void registerOIDCSession(final String sid, final String sessionId, OIDCTokens tokens) throws OIDCSessionDuplicateException {
         if (this.oidcSessionDuplicatePolicy != null && tokens.getDuplicateCheckKey() != null){
-            try {
-                this.oidcSessionDuplicatePolicy.onDuplicateOIDCSession(tokens.getDuplicateCheckKey(),
-                                                                       this.oidcSessionRegistry);
-            }catch(RBACException re){
-                throw new OIDCException(OIDCExceptionEnum.OIDC_SESSION_DUPLICATE, "Another session exists.");
-            }
+            this.oidcSessionDuplicatePolicy.onDuplicateOIDCSession(tokens.getDuplicateCheckKey(),
+                    this.oidcSessionRegistry);
         }
         this.oidcAuthParameterStorage.removeRequestParameterAdapter(sessionId);
         long accessTokenExpireTimeoutSec = -1;
@@ -133,7 +127,7 @@ public class OIDCSessionManager {
         try{
             accessTokenExpireTimeoutSec = this.oidcProvider.extractAccessTokenExpirationTime(tokens);
             refreshTokenExpireTimeoutSec = this.oidcProvider.extractRefreshTokenExpirationTime(tokens);
-        }catch(RBACException re){
+        }catch(TokenProcessingException tpe){
             LogUtil.error("Failed to extract Access / Refresh Token expiration timeout from tokens.", this);
         }
         this.oidcSessionRegistry.register(sid, tokens.getDuplicateCheckKey(), sessionId, tokens, this.timeoutSec, accessTokenExpireTimeoutSec, refreshTokenExpireTimeoutSec);
@@ -158,10 +152,10 @@ public class OIDCSessionManager {
      * @param response 서블릿 응답 객체
      * @param sid SID Claim 값
      * @param isNow 즉시 적용 여부를 설정. true일 경우 바로 OIDC 세션을 삭제, false일 경우 Interceptor에서 lazy 삭제.
-     * @throws OIDCException 서블릿 세션 무력화 예외 발생 시
+     * @throws NoWasSessionException 서블릿 세션 무력화 중, 서블릿 세션을 찾지 못했을 때 발생
      */
     public synchronized void expireSession(HttpServletRequest request, HttpServletResponse response,
-                                           final String sid, boolean isNow) throws OIDCException{
+                                           final String sid, boolean isNow) throws NoWasSessionException {
         OIDCSession sObj;
         if (request.getSession(false) == null){
             sObj = this.oidcSessionRegistry.getSessionBySID(sid);
@@ -198,12 +192,12 @@ public class OIDCSessionManager {
      * (Timeout일 경우 만료시키며, Timeout이 아닐경우 OIDC 세션 수명을 연장시킨다)<br>
      * 2. Auto Token Checker가 Bean으로 등록된 경우 Token 갱신 여부를 확인하고 필요시 Token의 갱신을 IDP로 요청한다.<br>
      * @param oidcSession OIDC 세션 객체.
-     * @throws OIDCException OIDC Session이 Timeout으로 인해 이미 만료처리(Lazy) 되었을 경우 던져진다.
+     * @throws OIDCSessionTimeoutException OIDC Session이 Timeout으로 인해 이미 만료처리(Lazy) 되었을 경우 던져진다.
      */
-    public void maintainSession(final OIDCSession oidcSession) throws OIDCException{
+    public void maintainSession(final OIDCSession oidcSession) throws OIDCSessionTimeoutException{
         try {
             this.oidcSessionRegistry.checkSessionTimeout(oidcSession, this.timeoutSec);
-        }catch (OIDCException e){
+        }catch (OIDCSessionTimeoutException e){
             LogUtil.info(e.getMessage(), this);
             throw e;
         }
@@ -216,8 +210,8 @@ public class OIDCSessionManager {
                 }else{
                     LogUtil.info("No needed to refresh tokens.", this);
                 }
-            }catch (OIDCException oe){
-                if (oe.getStep() == OIDCExceptionEnum.NULL_TOKEN_RESPONSE){
+            }catch (TokenRefreshException tre){
+                if (tre.getExpCause() == TokenRefreshException.Cause.NO_RESPONSE){
                     LogUtil.error("Null token accepted while refresh tokens.", this);
                     this.oidcSessionRegistry.invalidateSession(oidcSession.getSid(), oidcSession.getSessionId(), false);
                 }
@@ -234,9 +228,9 @@ public class OIDCSessionManager {
      * @param sessionId 요청 객체의 세션 ID. JSESSIONID를 사용할 경우 request.getSession().getId()
      * @param newAccessToken 새로운 Access Token 문자열(base64). Nullable.
      * @param newRefreshToken 새로운 Refresh Token 문자열(base64). Nullable.
-     * @throws OIDCException 인증 객체를 불러오지 못했거나, 기타 내부 예외 발생시 던져진다
+     * @throws TokenProcessingException 인증 객체를 불러오지 못했거나, 기타 내부 예외 발생시 던져진다
      */
-    public void setNewToken(final String sessionId, final String newAccessToken, final String newRefreshToken) throws OIDCException{
+    public void setNewToken(final String sessionId, final String newAccessToken, final String newRefreshToken) throws TokenProcessingException{
         if ((newAccessToken == null || newAccessToken.isEmpty())
                 && (newRefreshToken == null || newRefreshToken.isEmpty())){
             LogUtil.error("Required parameters not available." ,this);
@@ -244,7 +238,7 @@ public class OIDCSessionManager {
         }
         OIDCSession sObj = this.oidcSessionRegistry.getSessionBySessionId(sessionId);
         if (sObj == null){
-            throw new OIDCException(OIDCExceptionEnum.REFRESH_ACCESS_TOKEN, "No session available.");
+            throw new TokenRefreshException(TokenRefreshException.Cause.NO_OIDC_SESSION, "No session available.");
         }
         //-- update IDP Server Access time.
         sObj.setLatestIdptouchTimeSec(System.currentTimeMillis() / 1000);

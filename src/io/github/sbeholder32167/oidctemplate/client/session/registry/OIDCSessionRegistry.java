@@ -12,11 +12,10 @@
  */
 package io.github.sbeholder32167.oidctemplate.client.session.registry;
 
+import io.github.sbeholder32167.oidctemplate.client.exception.OIDCSessionTimeoutException;
 import io.github.sbeholder32167.oidctemplate.client.tokens.OIDCTokens;
 import io.github.sbeholder32167.oidctemplate.client.session.OIDCSession;
 import io.github.sbeholder32167.oidctemplate.client.session.repository.OIDCSessionRepository;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCException;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCExceptionEnum;
 import io.github.sbeholder32167.oidctemplate.util.LogUtil;
 
 /**
@@ -94,16 +93,16 @@ public abstract class OIDCSessionRegistry {
      * OIDC 세션의 Timeout을 확인.<br>
      * Timeout일 경우 만료시키고, Timeout이 되지 않았을 경우 연장시킨다<br>
      * @param oidcSession OIDC Session 객체.
-     * @throws OIDCException OIDC Session이 Timeout일 경우 던져진다.
+     * @throws OIDCSessionTimeoutException OIDC Session이 Timeout일 경우 던져진다.
      */
-    public void checkSessionTimeout(final OIDCSession oidcSession, final int timeoutSec) throws OIDCException {
+    public void checkSessionTimeout(final OIDCSession oidcSession, final int timeoutSec) throws OIDCSessionTimeoutException {
         final long currentTimeSec = System.currentTimeMillis() / 1000;
         LogUtil.info("Seconds after last accessed : " + (currentTimeSec - oidcSession.getLastAccessedTime()), this);
         if (currentTimeSec - oidcSession.getLastAccessedTime() > timeoutSec){
             //-- OIDC session timeout.
             LogUtil.info("OIDC Session timeout : " + currentTimeSec + "-" + oidcSession.getLastAccessedTime(), this);
             this.invalidateSession(oidcSession.getSid(), oidcSession.getSessionId(), false);
-            throw new OIDCException(OIDCExceptionEnum.OIDC_SESSION_TIMED_OUT, "OIDC Session Timed out.");
+            throw new OIDCSessionTimeoutException("OIDC Session Timed out.");
         }
         oidcSession.setLastAccessedTime(currentTimeSec);
         this.oidcSessionRepository.saveSession(oidcSession);

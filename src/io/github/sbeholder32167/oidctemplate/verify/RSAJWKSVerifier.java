@@ -10,20 +10,19 @@
  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  See the License for the specific language governing permissions and limitations under the License.
  */
-package io.github.sbeholder32167.oidctemplate.jwks;
+package io.github.sbeholder32167.oidctemplate.verify;
 
 import com.auth0.jwt.JWT;
 import com.auth0.jwt.algorithms.Algorithm;
 import com.auth0.jwt.exceptions.SignatureVerificationException;
 import com.auth0.jwt.interfaces.DecodedJWT;
-import io.github.sbeholder32167.oidctemplate.jwks.exception.JWKSException;
+import io.github.sbeholder32167.oidctemplate.client.exception.JWKSException;
 import io.github.sbeholder32167.oidctemplate.rest.RestfulUtil;
 import io.github.sbeholder32167.oidctemplate.util.LogUtil;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.util.Base64Utils;
 
 import java.io.ByteArrayInputStream;
 import java.math.BigInteger;
@@ -53,69 +52,64 @@ public class RSAJWKSVerifier {
     private RSAJWKSVerifier(){}
 
     /**
-     * 토큰을 검증한다.<br>
-     * HS512 알고리즘의 Refresh Token은 검증 대상이 아님.<br>
-     * 오로지 RSA 만 검증할수 있으므로 참고.<br>
-     * Public Key 생성 시 Key Algorithm을 Keyset과 비교한다.<br><br>
-     * Keycloak Test 2025-11-02.<br>
-     * Google Test 2026-08-20.<br>
-     * Naver Test 2026-09-05.<br>
+     * 토큰을 검증한다.<br/>
+     * HS512 알고리즘의 Refresh Token은 검증 대상이 아님.<br/>
+     * 오로지 RSA 만 검증할수 있으므로 참고.<br/>
+     * Public Key 생성 시 Key Algorithm을 Keyset과 비교한다.<br/><br/>
+     * Keycloak Test 2025-11-02.<br/>
+     * Google Test 2026-08-20.<br/>
+     * Naver Test 2026-09-05.<br/>
+     * Kakao Test 2026-10-07.<br/>
      *
-     * @since 2025-11-02<br>
+     * @since 2025-11-02
      * @param restUtil RestFulUtil 객체.
      * @param jwksEndpoint Keycloak Certification의 URL String.
      * @param token AccessToken을 의미. IDToken의 유효성도 검증할수는 있긴 하다.
-     * @param clientId Audience값과 비교하고 싶다면 clientId를 넣을것. 비교하기 싫다면 null을 넣으면 된다.
      * @exception JWKSException JWKS 단계의 모든 부분에서 예외를 이 방식으로 던진다.
      */
     public static void verifyToken(final RestfulUtil restUtil, final String jwksEndpoint,
-                                   final String token, final String clientId) throws JWKSException{
-        verifyToken(restUtil, jwksEndpoint, token, clientId, false);
+                                   final String token) throws JWKSException{
+        verifyToken(restUtil, jwksEndpoint, token, false);
     }
     /**
-     * 토큰을 검증한다.<br>
-     * HS512 알고리즘의 Refresh Token은 검증 대상이 아님.<br>
-     * 오로지 RSA 만 검증할수 있으므로 참고.<br>
-     * <br><br>
-     * Keycloak Test 2025-11-02.<br>
-     * Google Test 2026-08-20.<br>
-     * Naver Test 2026-09-05.<br>
+     * 토큰을 검증한다.<br/>
+     * HS512 알고리즘의 Refresh Token은 검증 대상이 아님.<br/>
+     * 오로지 RSA 만 검증할수 있으므로 참고.<br/>
+     * <br/><br/>
+     * Keycloak Test 2025-11-02.<br/>
+     * Google Test 2026-08-20.<br/>
+     * Naver Test 2026-09-05.<br/>
+     * Kakao Test 2026-10-07.<br/>
      *
-     * @since 2025-11-02<br>
+     * @since 2025-11-02
      * @param restUtil RestFulUtil 객체.
      * @param jwksEndpoint Keycloak Certification의 URL String.
      * @param token AccessToken을 의미. IDToken의 유효성도 검증할수는 있긴 하다.
-     * @param clientId Audience값과 비교하고 싶다면 clientId를 넣을것. 비교하기 싫다면 null을 넣으면 된다.
-     * @param skipCheckAlg Header의 Algorithm과 Key Set의 Algorithm 비교 로직을 건너뛴다.
+     * @param skipCheckAlg Header의 Algorithm과 Key Set의 Algorithm 비교 로직을 건너뛴다.Naver 전용.
      * @exception JWKSException JWKS 단계의 모든 부분에서 예외를 이 방식으로 던진다.
      */
     public static void verifyToken(final RestfulUtil restUtil, final String jwksEndpoint,
-                                   final String token, final String clientId, boolean skipCheckAlg) throws JWKSException {
+                                   final String token, boolean skipCheckAlg) throws JWKSException {
         //-- check Signature Algorithm..
         DecodedJWT decodedTkn;
         try{
             decodedTkn = JWT.decode(token);
         }catch(com.auth0.jwt.exceptions.JWTDecodeException jwtDecodeException){
-            throw new JWKSException(JWKSErrorEnum.DECODE_JWT, jwtDecodeException.getLocalizedMessage());
+            throw new JWKSException(JWKSException.Step.DECODE_JWT, jwtDecodeException.getLocalizedMessage());
         }
         String algStr = decodedTkn.getAlgorithm();
         if (algStr == null){
-            throw new JWKSException(JWKSErrorEnum.NULL_ALG, "Not found algorithm");
+            throw new JWKSException(JWKSException.Step.NULL_ALG, "Not found algorithm");
         }else if (algStr.isEmpty() || algStr.trim().isEmpty()){
-            throw new JWKSException(JWKSErrorEnum.NO_ALG, "Empty algorithm");
+            throw new JWKSException(JWKSException.Step.NO_ALG, "Empty algorithm");
         }
         LogUtil.info("Token Signature Algorithm:" + algStr, RSAJWKSVerifier.class.getName());
         String keyId = decodedTkn.getHeaderClaim("kid").asString();
 
-        //-- check audience
-        if (clientId != null && !clientId.trim().isEmpty()){
-            //-- Client ID가 지정되었을 때만 동작. null일 경우엔 검사하지 않고 Skip한다.
-            checkAudience(decodedTkn, clientId);
-        }
         //-- query JSON Web Key set.
         List<Object> rootLst = queryJWKS(restUtil, jwksEndpoint);
         if (rootLst == null){
-            throw new JWKSException(JWKSErrorEnum.NO_KEYS, "Null JWKS Keys.");
+            throw new JWKSException(JWKSException.Step.NO_KEYS, "Null JWKS Keys.");
         }
         if (skipCheckAlg) {
             //-- to parse Naver JWKS as omitted alg claim.
@@ -123,7 +117,7 @@ public class RSAJWKSVerifier {
         }
         PublicKey pk = findCertsInKeyList(rootLst, algStr, keyId);
         if (pk == null){
-            throw new JWKSException(JWKSErrorEnum.EXT_CERTS_ERR, "Can`t extract Public key from certificate.");
+            throw new JWKSException(JWKSException.Step.EXT_CERTS_ERR, "Can`t extract Public key from certificate.");
         }
         try {
             Algorithm algObj;
@@ -141,37 +135,11 @@ public class RSAJWKSVerifier {
                     algObj.verify(decodedTkn);
                     break;
                 default:
-                    throw new JWKSException(JWKSErrorEnum.NOT_SUPPORTED_ALG, "Unknown Encrypt Algorithm : " + algStr);
+                    throw new JWKSException(JWKSException.Step.NOT_SUPPORTED_ALG, "Unknown Encrypt Algorithm : " + algStr);
             }
         }catch (SignatureVerificationException e){
-            throw new JWKSException(JWKSErrorEnum.INVALID_SIG, "Signature Verification ERROR:" + e.getLocalizedMessage());
+            throw new JWKSException(JWKSException.Step.INVALID_SIG, "Signature Verification ERROR:" + e.getLocalizedMessage());
         }
-    }
-
-    /**
-     * Audience Claim이 주어진 Client ID와 일치하는지 검증
-     * @param decodedToken Decoded Token
-     * @param clientId Client ID
-     * @throws JWKSException Audience 리스트가 없거나, Audience가 일치하지 않을 경우 발생.
-     */
-    private static void checkAudience(DecodedJWT decodedToken, final String clientId) throws JWKSException {
-        //-- Client ID가 지정되었을 때만 동작. null일 경우엔 검사하지 않고 Skip한다.
-        boolean isInAudience = false;
-        List<String> audLst = decodedToken.getAudience();
-        if (audLst == null){
-            throw new JWKSException(JWKSErrorEnum.NULL_AUDIENCE, "Null Audience List.");
-        }else {
-            for (String aud : audLst){
-                if (aud.trim().equals(clientId.trim())){
-                    isInAudience = true;
-                    break;
-                }
-            }
-        }
-        if (!isInAudience){
-            throw new JWKSException(JWKSErrorEnum.INVALID_AUDIENCE, "Client ID is not in Audience List.");
-        }
-        LogUtil.info("Client ID is exist in Audience List.", RSAJWKSVerifier.class.getName());
     }
 
     /**
@@ -186,12 +154,12 @@ public class RSAJWKSVerifier {
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
         ResponseEntity<Map> response = restfulUtil.doRestful(jwksUri, HttpMethod.GET, headers, null, Map.class);
         if (response == null){
-            throw new JWKSException(JWKSErrorEnum.NULL_JWKS_RESPONSE, "Null JWKS response");
+            throw new JWKSException(JWKSException.Step.NULL_JWKS_RESPONSE, "Null JWKS response");
         }
         LogUtil.info("JWKS access Status : " + response.getStatusCode().value(), RSAJWKSVerifier.class.getName());
         Map<?,?> data = response.getBody();
         if (response.getStatusCode().value() != 200 || data == null){
-            throw new JWKSException(JWKSErrorEnum.FAILED_JWKS_RESPONSE, "JWKS Endpoint process has failed.");
+            throw new JWKSException(JWKSException.Step.FAILED_JWKS_RESPONSE, "JWKS Endpoint process has failed.");
         }
         @SuppressWarnings("unchecked")
         List<Object> result = (List<Object>)data.get("keys");
@@ -234,28 +202,28 @@ public class RSAJWKSVerifier {
                 }
             }
         }
-        throw new JWKSException(JWKSErrorEnum.GEN_CERTS_ERR, "no string to extract certs.");
+        throw new JWKSException(JWKSException.Step.GEN_CERTS_ERR, "no string to extract certs.");
     }
 
     private static PublicKey getPublicKeyFromX5c(final String x5cStr) throws JWKSException{
         try {
             CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
-            //byte[] decodedCerts = Base64.getDecoder().decode(x5cStr);
+            byte[] decodedCerts = Base64.getDecoder().decode(x5cStr);
             //-- Under JDK 1.8
-            byte[] decodedCerts = Base64Utils.decodeFromString(x5cStr);
+            //byte[] decodedCerts = Base64Utils.decodeFromString(x5cStr);
             X509Certificate certificate = (X509Certificate) certFactory.generateCertificate(new ByteArrayInputStream(decodedCerts));
             return certificate.getPublicKey();
         }catch(CertificateException ce){
-            throw new JWKSException(JWKSErrorEnum.GEN_CERTS_ERR, ce.getLocalizedMessage());
+            throw new JWKSException(JWKSException.Step.GEN_CERTS_ERR, ce.getLocalizedMessage());
         }
     }
     private static PublicKey getPublicKeyFromJwk(final String nStr, final String eStr) throws JWKSException{
         //-- decode Base64URL.
-        //byte[] nBytes = Base64.getUrlDecoder().decode(nStr);
-        //byte[] eBytes = Base64.getUrlDecoder().decode(eStr);
+        byte[] nBytes = Base64.getUrlDecoder().decode(nStr);
+        byte[] eBytes = Base64.getUrlDecoder().decode(eStr);
         //-- Under JDK 1.8
-        byte[] nBytes = Base64Utils.decodeFromString(nStr);
-        byte[] eBytes = Base64Utils.decodeFromString(eStr);
+        //byte[] nBytes = Base64Utils.decodeFromString(nStr);
+        //byte[] eBytes = Base64Utils.decodeFromString(eStr);
 
         //-- convert to BigInteger.
         BigInteger modulus = new BigInteger(1, nBytes);
@@ -267,7 +235,7 @@ public class RSAJWKSVerifier {
             keyFactory = KeyFactory.getInstance("RSA");
             return keyFactory.generatePublic(spec);
         } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
-            throw new JWKSException(JWKSErrorEnum.GEN_CERTS_ERR, e.getLocalizedMessage());
+            throw new JWKSException(JWKSException.Step.GEN_CERTS_ERR, e.getLocalizedMessage());
         }
     }
 

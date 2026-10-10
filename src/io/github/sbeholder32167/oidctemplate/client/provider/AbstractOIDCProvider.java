@@ -13,7 +13,7 @@
 package io.github.sbeholder32167.oidctemplate.client.provider;
 
 import io.github.sbeholder32167.oidctemplate.client.config.OIDCConfig;
-import io.github.sbeholder32167.oidctemplate.client.exception.RBACException;
+import io.github.sbeholder32167.oidctemplate.client.exception.TokenProcessingException;
 import io.github.sbeholder32167.oidctemplate.client.tokens.OIDCTokens;
 import io.github.sbeholder32167.oidctemplate.rest.RestfulUtil;
 import io.github.sbeholder32167.oidctemplate.client.session.storage.OIDCAuthParameterStorage;
@@ -65,16 +65,16 @@ public abstract class AbstractOIDCProvider implements OIDCProvider{
     }
 
     @Override
-    public long extractAccessTokenExpirationTime(final OIDCTokens tokens) throws RBACException {
+    public long extractAccessTokenExpirationTime(final OIDCTokens tokens) throws TokenProcessingException {
         long currentTimeSec = System.currentTimeMillis() / 1000;
         return currentTimeSec + tokens.getTokenTransferObj().getExpiresIn();
     }
 
     @Override
-    public long extractRefreshTokenExpirationTime(final OIDCTokens tokens) throws RBACException {
+    public long extractRefreshTokenExpirationTime(final OIDCTokens tokens) throws TokenProcessingException {
         //-- Extract expiration time for refresh token.
         if (tokens.getRefreshToken() == null || tokens.getRefreshToken().isEmpty()){
-            return -1;
+            throw new TokenProcessingException("Null refresh Token.");
         }
         long currentTimeSec = System.currentTimeMillis() / 1000;
         return currentTimeSec + tokens.getTokenTransferObj().getRefreshExpiresIn();

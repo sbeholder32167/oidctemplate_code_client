@@ -21,6 +21,7 @@ import org.springframework.http.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Keycloak IDP 전용 Utility 메서드 모음.<br>
@@ -58,10 +59,10 @@ public class KeycloakUtil {
             }
 
             List<?> rawList = (List<?>) rolesData;
-            //return rawList.stream().filter(String.class::isInstance)
-            //        .map(String.class::cast).collect(Collectors.toList());
+            return rawList.stream().filter(String.class::isInstance)
+                    .map(String.class::cast).collect(Collectors.toList());
             //-- Under JDK 1.8
-            return (List<String>)rolesData;
+            //return (List<String>)rolesData;
         }catch (Exception je){
             LogUtil.error("JWT Decode Exception:" + je.getLocalizedMessage(), KeycloakUtil.class.getName());
             return null;
@@ -87,10 +88,10 @@ public class KeycloakUtil {
             }
 
             List<?> rawList = (List<?>) rolesData;
-            //return rawList.stream().filter(String.class::isInstance)
-            //        .map(String.class::cast).collect(Collectors.toList());
+            return rawList.stream().filter(String.class::isInstance)
+                    .map(String.class::cast).collect(Collectors.toList());
             //-- Under JDK 1.8
-            return (List<String>)rolesData;
+            //return (List<String>)rolesData;
         } catch (Exception e) {
             LogUtil.error("Keycloak Realm Role Extraction Exception: " + e.getLocalizedMessage(), KeycloakUtil.class.getName());
             return null;

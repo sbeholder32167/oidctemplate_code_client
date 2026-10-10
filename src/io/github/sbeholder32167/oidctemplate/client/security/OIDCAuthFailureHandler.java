@@ -13,8 +13,9 @@
 package io.github.sbeholder32167.oidctemplate.client.security;
 
 import io.github.sbeholder32167.oidctemplate.adapter.ClientLoginAdapter;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCException;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCExceptionEnum;
+import io.github.sbeholder32167.oidctemplate.client.exception.OIDCAuthenticationException;
+import io.github.sbeholder32167.oidctemplate.client.exception.OIDCSessionDuplicateException;
+import io.github.sbeholder32167.oidctemplate.client.exception.OIDCException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationFailureHandler;
 import org.springframework.security.web.authentication.session.SessionAuthenticationException;
@@ -55,9 +56,9 @@ public class OIDCAuthFailureHandler extends SimpleUrlAuthenticationFailureHandle
         if (this.clientLoginAdapter != null) {
             OIDCException oe;
             if (exception instanceof SessionAuthenticationException){
-                oe = new OIDCException(OIDCExceptionEnum.OIDC_SESSION_DUPLICATE, exception.getLocalizedMessage());
+                oe = new OIDCSessionDuplicateException(exception.getLocalizedMessage());
             }else{
-                oe = new OIDCException(OIDCExceptionEnum.RBAC, exception.getLocalizedMessage());
+                oe = new OIDCAuthenticationException(exception.getLocalizedMessage());
             }
             this.clientLoginAdapter.doJobFailedLogin(request, response, oe);
         }else{

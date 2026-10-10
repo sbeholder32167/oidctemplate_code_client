@@ -18,10 +18,10 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 /**
- * ABAC 동작 중 예외처리 Interface.<br>
+ * AUTHZ 동작 중 예외처리 Interface.<br>
  *
- * <p>ABAC 인가 처리 도중 예외 처리 Interface.<br>
- * ABAC Interceptor에서의 예외 발생에 따른 동작을 구현하여 Bean으로 적용 필요<br></p>
+ * <p>AUTHZ 인가 처리 도중 예외 처리 Interface.<br>
+ * AUTHZ Interceptor에서의 예외 발생에 따른 동작을 구현하여 Bean으로 적용 필요<br></p>
  *
  * @author sbeholder6684
  * @version 1.0.0
@@ -29,24 +29,27 @@ import javax.servlet.http.HttpServletResponse;
  */
 public interface ClientAuthzExceptionAdapter {
     /**
-     * Json 형식으로 인증이 거부되거나 접근이 거부될 경우의 Json Format을 정의 <br>
+     * 인가 실패로 인해 접근이 거부될 경우, Json 리턴 Logic의 정의 <br>
      * JSON 방식으로 리턴되는 엔드포인트의 인증 실패 또는 접근 거부 시 메시지를 생성 <br>
      * @param status HttpStatus
      * @param request HttpServletRequest
      * @param response HttpServletResponse
-     * @return Json Message
+     * @param resourceName 인가 Resource 명
+     * @param scopes 인가 Scope 배열
      */
-    String generateJsonMessage(HttpStatus status, HttpServletRequest request,
-                               HttpServletResponse response);
+    void handleBlockJson(HttpStatus status, HttpServletRequest request, HttpServletResponse response,
+                         final String resourceName, String[] scopes);
 
     /**
-     * 인증 실패 또는 접근 거부에 따른 동작을 정의 <br>
+     * 인가 실패로 인해 접근이 거부될 경우, 그에 따른 동작을 정의 <br>
      * JSON 방식으로 리턴되지 않는 엔드포인트의 접근 거부 시 동작 <br>
      * Redirect 또는 예외 처리 등 <br>
      * @param status Http Status
      * @param request HttpServletRequest
      * @param response HttpServletResponse
+     * @param resourceName 인가 Resource 명
+     * @param scopes 인가 Scope 배열
      */
-    void doPostAuthException(HttpStatus status, HttpServletRequest request,
-                             HttpServletResponse response);
+    void handleBlockHtml(HttpStatus status, HttpServletRequest request, HttpServletResponse response,
+                         final String resourceName, String[] scopes);
 }

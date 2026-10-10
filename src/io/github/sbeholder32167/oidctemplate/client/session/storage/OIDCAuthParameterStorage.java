@@ -12,7 +12,7 @@
  */
 package io.github.sbeholder32167.oidctemplate.client.session.storage;
 
-import io.github.sbeholder32167.oidctemplate.exception.OIDCException;
+import io.github.sbeholder32167.oidctemplate.client.exception.AuthenticationCodeFlowException;
 import io.github.sbeholder32167.oidctemplate.client.provider.AbstractOIDCProvider;
 
 /**
@@ -34,16 +34,16 @@ public interface OIDCAuthParameterStorage {
      * @param value 값
      * @param sessionId 요청 객체의 세션 ID. JSESSIONID를 사용할 경우 request.getSession().getId()
      */
-    void setRequestParameter(final String key, final String value, final String sessionId) throws OIDCException;
+    void setRequestParameter(final String key, final String value, final String sessionId) throws AuthenticationCodeFlowException;
     /**
      * 요청 파라미터를 가져온다<br>
      * @param key state, session_state, pkce_verifier ...
      * @param remove 삭제 여부. true이면 가져옴과 동시에 삭제.
      * @param sessionId 요청 객체의 세션 ID. JSESSIONID를 사용할 경우 request.getSession().getId()
      * @return 값
-     * @throws OIDCException 주어진 Session ID에 해당된 객체 자체가 없다면 발생
+     * @throws AuthenticationCodeFlowException 주어진 Session ID에 해당된 객체 자체가 없다면 발생
      */
-    String getRequestParameterValue(final String key, final boolean remove, final String sessionId) throws OIDCException;
+    String getRequestParameterValue(final String key, final boolean remove, final String sessionId) throws AuthenticationCodeFlowException;
     /**
      * 요청 파라미터를 담은 객체를 가져온다.<br>
      * OIDC Session Interceptor에서 사용한다<br>

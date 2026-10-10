@@ -13,7 +13,7 @@
 package io.github.sbeholder32167.oidctemplate.adapter;
 
 import io.github.sbeholder32167.oidctemplate.client.OIDCTokenTransferObject;
-import io.github.sbeholder32167.oidctemplate.client.exception.RBACException;
+import io.github.sbeholder32167.oidctemplate.client.exception.TokenConvertException;
 
 /**
  * 토큰 세션 변환 어댑터 Interface.<br>
@@ -37,7 +37,7 @@ public interface ClientAuthConvertAdapter {
      * Spring Security를 사용하지 않는 경우, 사용중인 Legacy 세션 객체를 리턴하도록 구현한다.<br>
      * @param tto OIDC Token 객체
      * @return Authentication 구현체(Spring Security) 또는 Legacy 세션 객체(Non-Spring Security)
-     * @throws RBACException 토큰 및 각종 정보들이 정상적으로 유입되지 않았을 경우 또는 레거시 세션을 만들수 없을 때 발생.
+     * @throws TokenConvertException 토큰 및 각종 정보들이 정상적으로 유입되지 않았을 경우 또는 레거시 세션을 만들수 없을 때 발생.
      */
-    Object buildAuthenticationUsingToken(final OIDCTokenTransferObject tto) throws RBACException;
+    Object buildAuthenticationUsingToken(final OIDCTokenTransferObject tto) throws TokenConvertException;
 }

@@ -17,8 +17,7 @@ import com.auth0.jwt.exceptions.JWTDecodeException;
 import com.auth0.jwt.interfaces.Claim;
 import io.github.sbeholder32167.oidctemplate.OIDCConstants;
 import io.github.sbeholder32167.oidctemplate.adapter.ClientLogoutAdapter;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCException;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCExceptionEnum;
+import io.github.sbeholder32167.oidctemplate.client.exception.*;
 import io.github.sbeholder32167.oidctemplate.client.config.OIDCConfig;
 import io.github.sbeholder32167.oidctemplate.client.OIDCTokenTransferObject;
 import io.github.sbeholder32167.oidctemplate.client.tokens.OIDCTokens;
@@ -27,7 +26,6 @@ import io.github.sbeholder32167.oidctemplate.rest.RestfulUtil;
 import io.github.sbeholder32167.oidctemplate.client.session.OIDCSession;
 import io.github.sbeholder32167.oidctemplate.client.session.OIDCSessionManager;
 import org.springframework.http.*;
-import org.springframework.util.Base64Utils;
 
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
@@ -37,6 +35,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -58,9 +57,9 @@ public class OIDCUtil {
     public static String generateState(final int length) {
         byte[] randomBytes = new byte[length];
         secureRandom.nextBytes(randomBytes);
-        //return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
         //-- Under JDK 1.8
-        return Base64Utils.encodeToUrlSafeString(randomBytes).replaceAll("=+$", "");
+        //return Base64Utils.encodeToUrlSafeString(randomBytes).replaceAll("=+$", "");
     }
     /**
      * URI 패스를 기반으로 완전한 URL 주소를 빌드
@@ -94,9 +93,9 @@ public class OIDCUtil {
     public static String generateCodeVerifier() {
         byte[] codeVerifier = new byte[32]; // 32바이트의 난수 생성
         secureRandom.nextBytes(codeVerifier);
-        //return Base64.getUrlEncoder().withoutPadding().encodeToString(codeVerifier);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(codeVerifier);
         //-- Under JDK 1.8
-        return Base64Utils.encodeToUrlSafeString(codeVerifier).replaceAll("=+$", "");
+        //return Base64Utils.encodeToUrlSafeString(codeVerifier).replaceAll("=+$", "");
     }
 
     /**
@@ -108,9 +107,9 @@ public class OIDCUtil {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hash = digest.digest(codeVerifier.getBytes(StandardCharsets.UTF_8));
-            //return Base64.getUrlEncoder().withoutPadding().encodeToString(hash);
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(hash);
             //-- Under JDK 1.8
-            return Base64Utils.encodeToUrlSafeString(hash).replaceAll("=+$", "");
+            //return Base64Utils.encodeToUrlSafeString(hash).replaceAll("=+$", "");
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256", e);
         }
@@ -131,12 +130,12 @@ public class OIDCUtil {
      * JSESSIONID Cookie 값이 세션 추출 과정에서 변경되지 말아야 할 경우 이용.<br>
      * @param request 서블릿 요청 객체
      * @return Session ID
-     * @throws OIDCException 주어진 요청에서 세션이 없을 경우 발생.
+     * @throws NoWasSessionException 주어진 요청에서 세션이 없을 경우 발생.
      */
-    public static String extractSessionId(final HttpServletRequest request) throws OIDCException {
+    public static String extractSessionId(final HttpServletRequest request) throws NoWasSessionException {
         HttpSession session = request.getSession(false);
         if (session == null){
-            throw new OIDCException(OIDCExceptionEnum.REQ_SESSION_EXCEPTION, "Null Session");
+            throw new NoWasSessionException("Null Session");
         }
         return session.getId();
     }
@@ -151,12 +150,12 @@ public class OIDCUtil {
      * @return JWKS 검증이 되지 않은 토큰<br>id_token, access_token, refresh_token<br>Nullable
      */
     public static Map<String, Object> exchangeCodeForToken(final RestfulUtil restUtil, final OIDCConfig config,
-                                                     String code, String codeVerifier, String state,
-                                                     String sessionState, String scope, String redirectUri) {
+                                                           String code, String codeVerifier, String state,
+                                                           String sessionState, String scope, String redirectUri) {
         //-- Access Token과 idToken을 받아온다..
-        HttpHeaders headers = new HttpHeaders();
+        final HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-        Map<String, String> bodyParams = new HashMap<>();
+        Map<String, String> bodyParams = new HashMap<String, String>();
         bodyParams.put("grant_type","authorization_code");
         bodyParams.put("code",code);
         if (sessionState != null && !sessionState.isEmpty()){
@@ -172,11 +171,10 @@ public class OIDCUtil {
             bodyParams.put("redirect_uri",redirectUri);
         }
         bodyParams.put("scope", scope.replace(","," "));
-        String tokenEndpoint = config.getTokenEndpoint();
-        ResponseEntity<Map> response = restUtil.doRestful(tokenEndpoint, HttpMethod.POST, headers, bodyParams, Map.class);
+        ResponseEntity<Map> response = restUtil.doRestful(config.getTokenEndpoint(), HttpMethod.POST, headers, bodyParams, Map.class);
         HttpStatus resCode = response.getStatusCode();
         if (resCode == HttpStatus.OK){
-            Map<String, Object> result = new HashMap<>();
+            Map<String, Object> result = new HashMap<String, Object>();
             for(Object rawK : response.getBody().keySet()){
                 result.put(String.valueOf(rawK), response.getBody().get(rawK));
             }
@@ -196,16 +194,15 @@ public class OIDCUtil {
      */
     public static Map<String, Object> refreshToken(final RestfulUtil restUtil, final OIDCConfig config,
                                                    final String refreshToken) {
-        HttpHeaders headers = new HttpHeaders();
+        final HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-        Map<String, String> bodyParams = new HashMap<>();
+        Map<String, String> bodyParams = new HashMap<String, String>();
         bodyParams.put("grant_type","refresh_token");
         bodyParams.put("refresh_token",refreshToken);
         bodyParams.put("client_id", config.getClientId());
         bodyParams.put("client_secret",config.getClientSecret());
         bodyParams.put("scope", config.getScope().replace(","," "));
-        String tokenEndpoint = config.getTokenEndpoint();
-        ResponseEntity<Map> response = restUtil.doRestful(tokenEndpoint, HttpMethod.POST, headers, bodyParams, Map.class);
+        ResponseEntity<Map> response = restUtil.doRestful(config.getTokenEndpoint(), HttpMethod.POST, headers, bodyParams, Map.class);
         HttpStatus resCode = response.getStatusCode();
         if (resCode == HttpStatus.OK){
             Map<String, Object> result = new HashMap<String, Object>();
@@ -215,6 +212,34 @@ public class OIDCUtil {
             return result;
         }else{
             LogUtil.error("Token(Refresh) request has failed:" + resCode.value(), OIDCUtil.class.getName());
+            return null;
+        }
+    }
+
+    /**
+     * Client Credentials Type의 Token을 받아온다.<br>
+     * 일반 사용자 인증이 필요한 Token들과 다르다.<br>
+     * @param restUtil RestfulUtil Object.
+     * @param config OIDCConfig bean.
+     * @return JWKS 검증이 되지 않은 토큰<br>access_token<br>Nullable
+     */
+    public static Map<String, Object> getTokensByClientCredentials(final RestfulUtil restUtil, final OIDCConfig config){
+        final HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        Map<String, String> bodyParams = new HashMap<String, String>();
+        bodyParams.put("grant_type","client_credentials");
+        bodyParams.put("client_id", config.getClientId());
+        bodyParams.put("client_secret",config.getClientSecret());
+        ResponseEntity<Map> response = restUtil.doRestful(config.getTokenEndpoint(), HttpMethod.POST, headers, bodyParams, Map.class);
+        HttpStatus resCode = response.getStatusCode();
+        if (resCode == HttpStatus.OK){
+            Map<String, Object> result = new HashMap<String, Object>();
+            for(Object rawK : response.getBody().keySet()){
+                result.put(String.valueOf(rawK), response.getBody().get(rawK));
+            }
+            return result;
+        }else{
+            LogUtil.error("Access token(Client Credentials) request has failed:" + resCode.value(), OIDCUtil.class.getName());
             return null;
         }
     }
@@ -240,12 +265,13 @@ public class OIDCUtil {
      * @param response 서블릿 응답 객체
      * @param sessionManager OIDC Session Storage Bean
      * @param clientLogoutAdapter OIDCLogoutAdapter. Nullable.
+     * @throws OIDCLogoutException SID 또는 세션을 찾지 못하는 경우 발생
      */
     public static void doLogout(final String sid,
                                 HttpServletRequest request, HttpServletResponse response,
-                                OIDCSessionManager sessionManager, ClientLogoutAdapter clientLogoutAdapter, boolean isNow) throws OIDCException {
+                                OIDCSessionManager sessionManager, ClientLogoutAdapter clientLogoutAdapter, boolean isNow) throws OIDCLogoutException {
         if (sid == null || sid.isEmpty()){
-            throw new OIDCException(OIDCExceptionEnum.NULL_SESSION_ID, "No Session Id");
+            throw new OIDCLogoutException(AuthenticationCodeFlowException.Cause.NO_SID, "No Session Id");
         }
         //-- Logout에서는 사용자에 의한 쿠키가 전달되지 않을 때도 있다.
         OIDCSession session;
@@ -256,12 +282,16 @@ public class OIDCUtil {
             session = sessionManager.getSessionBySessionID(sessionId);
         }
         if (session == null){
-            throw new OIDCException(OIDCExceptionEnum.REQ_SESSION_EXCEPTION, "Null Session.");
+            throw new OIDCLogoutException(AuthenticationCodeFlowException.Cause.NO_OIDC_SESSION, "Null Session.");
         }
         if (clientLogoutAdapter != null){
             clientLogoutAdapter.doJobBeforeLogout(request, response ,session.getTokens());
         }
-        sessionManager.expireSession(request, response, sid, isNow);
+        try {
+            sessionManager.expireSession(request, response, sid, isNow);
+        }catch(NoWasSessionException oe){
+            LogUtil.error(oe.getMessage(), OIDCUtil.class.getName());
+        }
         if (clientLogoutAdapter != null){
             clientLogoutAdapter.doJobPostLogout(response ,session.getTokens());
         }
@@ -271,9 +301,9 @@ public class OIDCUtil {
      * 세션 내 토큰을 갱신
      * @param oidcSession OIDC Session
      * @param oidcProvider OIDC Provider (Keycloak ...)
-     * @throws OIDCException Access / Refresh Token의 파싱 실패 또는 null.
+     * @throws TokenRefreshException Access / Refresh Token의 파싱 실패 또는 null.
      */
-    public static void refreshTokenInSession(OIDCSession oidcSession, OIDCProvider oidcProvider) throws OIDCException {
+    public static void refreshTokenInSession(OIDCSession oidcSession, OIDCProvider oidcProvider) throws TokenRefreshException {
         LogUtil.info("checked token that needed to refresh:" + oidcSession.getSid(), OIDCUtil.class.getName());
         OIDCTokens tObj = oidcSession.getTokens();
         try {
@@ -282,23 +312,43 @@ public class OIDCUtil {
                 LogUtil.error( "Auto token refresh has been failed. No Access Token", OIDCUtil.class.getName());
             }else{
                 tObj.setAccessToken(tto.getAccessToken());
-                long newTokenExpirationTimeSec = oidcProvider.extractAccessTokenExpirationTime(tObj);
+                long newTokenExpirationTimeSec = extractAccessTokenExpTime(oidcProvider, tObj);
                 oidcSession.setAccessTokenExpirationTimeSec(newTokenExpirationTimeSec);
-                LogUtil.info("Expiration time extracted successfully(Auto Refreshed):" + newTokenExpirationTimeSec, OIDCUtil.class.getName());
             }
             if (tto.getRefreshToken() != null && !tto.getRefreshToken().isEmpty()){
                 tObj.setRefreshToken(tto.getRefreshToken());
-                long newTokenExpirationTimeSec = oidcProvider.extractRefreshTokenExpirationTime(tObj);
+                long newTokenExpirationTimeSec = extractRefreshTokenExpTime(oidcProvider, tObj);
                 oidcSession.setRefreshTokenExpirationTimeSec(newTokenExpirationTimeSec);
-                LogUtil.info("Expiration time in Refresh token extracted successfully(Auto Refreshed):" + newTokenExpirationTimeSec, OIDCUtil.class.getName());
             }
             oidcSession.setLatestIdptouchTimeSec(System.currentTimeMillis() / 1000);
-        } catch (OIDCException e) {
-            LogUtil.error("Auto token refresh has been failed:" + oidcSession.getSid() + " : " + e.getLocalizedMessage(), OIDCUtil.class.getName());
-            if (e.getStep() == OIDCExceptionEnum.NULL_TOKEN_RESPONSE){
-                throw e;
+        } catch (TokenRefreshException tre) {
+            LogUtil.error("Auto token refresh has been failed:" + oidcSession.getSid() + " : " + tre.getLocalizedMessage(), OIDCUtil.class.getName());
+            if (tre.getExpCause() == TokenRefreshException.Cause.NO_RESPONSE){
+                throw tre;
             }
         }
+    }
+    private static long extractAccessTokenExpTime(OIDCProvider oidcProvider, OIDCTokens oidcTokens){
+        long expirationTimeSec;
+        try{
+            expirationTimeSec = oidcProvider.extractAccessTokenExpirationTime(oidcTokens);
+            LogUtil.info("Expiration time extracted successfully(Auto Refreshed):" + expirationTimeSec, OIDCUtil.class.getName());
+        }catch(TokenProcessingException tpe){
+            expirationTimeSec = System.currentTimeMillis() / 1000 + 300;
+            LogUtil.info("Expiration time extracting has failed.Applied 300s as Default Value.(Auto Refreshed):" + expirationTimeSec, OIDCUtil.class.getName());
+        }
+        return expirationTimeSec;
+    }
+    private static long extractRefreshTokenExpTime(OIDCProvider oidcProvider, OIDCTokens oidcTokens){
+        long expirationTimeSec;
+        try{
+            expirationTimeSec = oidcProvider.extractRefreshTokenExpirationTime(oidcTokens);
+            LogUtil.info("Expiration time in Refresh token extracted successfully(Auto Refreshed):" + expirationTimeSec, OIDCUtil.class.getName());
+        }catch(TokenProcessingException tpe){
+            expirationTimeSec = System.currentTimeMillis() / 1000 + 3600;
+            LogUtil.info("Expiration time in Refresh token extracting has failed.Applied 1 Hour as Default Value.(Auto Refreshed):" + expirationTimeSec, OIDCUtil.class.getName());
+        }
+        return expirationTimeSec;
     }
 
     /**
@@ -340,7 +390,7 @@ public class OIDCUtil {
      */
     public static <T> ResponseEntity<T> queryAPI(RestfulUtil restUtil, final String uri, final String accessToken,
                                                HttpMethod method, Map<String, String> param, Class<T> resultClass){
-        HttpHeaders headers = new HttpHeaders();
+        final HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
         headers.set("Authorization", "Bearer " + accessToken);
         Map<String, String> tMap = param;

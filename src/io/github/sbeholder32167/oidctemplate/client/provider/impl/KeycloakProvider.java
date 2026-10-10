@@ -16,16 +16,14 @@ import com.auth0.jwt.interfaces.Claim;
 import io.github.sbeholder32167.oidctemplate.OIDCConstants;
 import io.github.sbeholder32167.oidctemplate.adapter.ClientLogoutAdapter;
 import io.github.sbeholder32167.oidctemplate.client.config.OIDCConfig;
+import io.github.sbeholder32167.oidctemplate.client.exception.*;
 import io.github.sbeholder32167.oidctemplate.client.session.OIDCSession;
 import io.github.sbeholder32167.oidctemplate.client.session.OIDCSessionManager;
 import io.github.sbeholder32167.oidctemplate.client.tokens.OIDCTokens;
 import io.github.sbeholder32167.oidctemplate.client.tokens.impl.KeycloakTokens;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCException;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCExceptionEnum;
-import io.github.sbeholder32167.oidctemplate.jwks.RSAJWKSVerifier;
-import io.github.sbeholder32167.oidctemplate.jwks.exception.JWKSException;
+import io.github.sbeholder32167.oidctemplate.verify.IDTokenVerifier;
+import io.github.sbeholder32167.oidctemplate.verify.RSAJWKSVerifier;
 import io.github.sbeholder32167.oidctemplate.client.*;
-import io.github.sbeholder32167.oidctemplate.client.exception.RBACException;
 import io.github.sbeholder32167.oidctemplate.client.provider.AbstractOIDCProvider;
 import io.github.sbeholder32167.oidctemplate.rest.RestfulUtil;
 import io.github.sbeholder32167.oidctemplate.client.session.storage.OIDCAuthParameterStorage;
@@ -39,6 +37,7 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Keycloak 인증 제공자 Class.<br>
@@ -58,22 +57,32 @@ public class KeycloakProvider extends AbstractOIDCProvider {
     }
 
     @Override
-    public void redirectIDPAuthPage(HttpServletRequest request, HttpServletResponse response, final String redirectUri) throws OIDCException, IOException{
+    public void redirectIDPAuthPage(HttpServletRequest request, HttpServletResponse response, final String redirectUri) throws AuthenticationCodeFlowException, IOException{
         String redirectUrl;
         if (redirectUri == null){
             redirectUrl = this.oidcConfig.getRedirectUri();
         }else{
             redirectUrl = OIDCUtil.buildFullUrl(request, redirectUri);
         }
-        String sessionId = OIDCUtil.extractSessionId(request);
+        String sessionId;
+        try {
+            sessionId = OIDCUtil.extractSessionId(request);
+        }catch(NoWasSessionException ne){
+            throw new AuthenticationCodeFlowException(AuthenticationCodeFlowException.Step.IDP_AUTH_REDIRECT,
+                    AuthenticationCodeFlowException.Cause.NULL_WAS_SESSION_ID,
+                    ne.getMessage());
+        }
         String state = OIDCUtil.generateState(16);
         this.oidcAuthParameterStorage.setRequestParameter(STATE_ATTR, state, sessionId);
+        String nonce = UUID.randomUUID().toString();
+        this.oidcAuthParameterStorage.setRequestParameter(NONCE_ATTR, nonce, sessionId);
         StringBuilder builder = new StringBuilder(this.oidcConfig.getAuthenticationEndpoint());
         builder.append("?client_id=").append(this.oidcConfig.getClientId())
                 .append("&redirect_uri=").append(URLEncoder.encode(redirectUrl, "UTF-8"))
                 .append("&response_type=code")
                 .append("&scope=").append(this.oidcConfig.getScope())
-                .append("&state=").append(state);
+                .append("&state=").append(state)
+                .append("&nonce=").append(nonce);
         if (this.oidcConfig.isUsePkce()){
             String codeVerifier = OIDCUtil.generateCodeVerifier();
             this.oidcAuthParameterStorage.setRequestParameter(PKCE_ATTR, codeVerifier, sessionId);
@@ -88,25 +97,36 @@ public class KeycloakProvider extends AbstractOIDCProvider {
     }
 
     @Override
-    public OIDCDataTransferObject checkParameters(HttpServletRequest request) throws OIDCException {
+    public OIDCDataTransferObject checkParameters(HttpServletRequest request) throws AuthenticationCodeFlowException {
         String state = request.getParameter("state");
         String code = request.getParameter("code");
         String sessionState = request.getParameter("session_state");
-        String sessionId = OIDCUtil.extractSessionId(request);
+        String sessionId;
+        try {
+            sessionId = OIDCUtil.extractSessionId(request);
+        }catch(NoWasSessionException ne){
+            throw new AuthenticationCodeFlowException(AuthenticationCodeFlowException.Step.CHECK_PARAMETERS,
+                    AuthenticationCodeFlowException.Cause.NULL_WAS_SESSION_ID,
+                    ne.getMessage());
+        }
         String savedState = String.valueOf(this.oidcAuthParameterStorage.getRequestParameterValue(STATE_ATTR, true, sessionId));
         String codeVerifier = String.valueOf(this.oidcAuthParameterStorage.getRequestParameterValue(PKCE_ATTR, true, sessionId));
+        String nonce = String.valueOf(this.oidcAuthParameterStorage.getRequestParameterValue(NONCE_ATTR, true, sessionId));
         String scope = this.oidcConfig.getScope();
         if (state == null || state.isEmpty() ||
                 code == null || code.isEmpty() ||
                 savedState == null || savedState.isEmpty() ||
                 scope == null || scope.isEmpty() ||
                 codeVerifier == null || codeVerifier.isEmpty()){
-            throw new OIDCException(OIDCExceptionEnum.CHECK_PARAMETERS, "Not enough parameters.");
+            throw new AuthenticationCodeFlowException(AuthenticationCodeFlowException.Step.CHECK_PARAMETERS,
+                    AuthenticationCodeFlowException.Cause.INSUFFICIENT,
+                    "Not enough parameters.");
         }
         //-- Compare State in Session.
         if (!savedState.equals(state)) {
-            // NOSONAR throw new BadCredentialsException("Invalid OIDC State");
-            throw new OIDCException(OIDCExceptionEnum.CHECK_STATE, "Invalid state.");
+            throw new AuthenticationCodeFlowException(AuthenticationCodeFlowException.Step.CHECK_STATE,
+                    AuthenticationCodeFlowException.Cause.INVALID,
+                    "Invalid state.");
         }
         //-- Session clear.
         request.getSession().removeAttribute(STATE_ATTR);
@@ -119,22 +139,25 @@ public class KeycloakProvider extends AbstractOIDCProvider {
         result.setScope(scope);
         result.setCodeVerifier(codeVerifier);
         result.setSessionState(sessionState);
+        result.setNonce(nonce);
         //-- 만약 보안을 위해 Session을 refresh할 경우, 여기서 session Id를 넣는 것은 무의미하다.
         // NOSONAR result.setSessionId(sessionId);
         return result;
     }
 
-    public synchronized OIDCTokenTransferObject acquireTokens(OIDCDataTransferObject dto, final String redirectUri) throws OIDCException {
+    public synchronized OIDCTokenTransferObject acquireTokens(OIDCDataTransferObject dto, final String redirectUri) throws AuthenticationCodeFlowException {
         Map<String, Object> tokenResponse = OIDCUtil.exchangeCodeForToken(
                 this.restfulUtil, this.oidcConfig,
                 dto.getCode(), dto.getCodeVerifier(), dto.getState(), dto.getSessionState(), dto.getScope(),
                 redirectUri);
         if (tokenResponse == null || tokenResponse.isEmpty()){
-            throw new OIDCException(OIDCExceptionEnum.NULL_TOKEN_RESPONSE, "Null Token response.");
+            throw new AuthenticationCodeFlowException(AuthenticationCodeFlowException.Step.TOKEN_EXCHANGE,
+                    AuthenticationCodeFlowException.Cause.NULL_VALUE, "Null Token response.");
         }
         if (tokenResponse.get(ACCESS_TOKEN) == null ||
                 tokenResponse.get(REFRESH_TOKEN) == null){
-            throw new OIDCException(OIDCExceptionEnum.INSUFFICIENT_TOKEN, "Insufficient tokens");
+            throw new AuthenticationCodeFlowException(AuthenticationCodeFlowException.Step.TOKEN_EXCHANGE,
+                    AuthenticationCodeFlowException.Cause.INSUFFICIENT, "Insufficient tokens");
         }
         OIDCTokenTransferObject result = new OIDCTokenTransferObject();
         if (tokenResponse.get(ID_TOKEN) != null && !String.valueOf(tokenResponse.get(ID_TOKEN)).isEmpty()){
@@ -151,13 +174,13 @@ public class KeycloakProvider extends AbstractOIDCProvider {
         return result;
     }
 
-    public synchronized OIDCTokenTransferObject refreshTokens(final String refreshToken) throws OIDCException {
+    public synchronized OIDCTokenTransferObject refreshTokens(final String refreshToken) throws TokenRefreshException {
         Map<String, Object> tokenResponse = OIDCUtil.refreshToken(this.restfulUtil, this.oidcConfig, refreshToken);
         if (tokenResponse == null || tokenResponse.isEmpty()){
-            throw new OIDCException(OIDCExceptionEnum.NULL_TOKEN_RESPONSE, "Null Token response.");
+            throw new TokenRefreshException(TokenRefreshException.Cause.NO_RESPONSE, "Null Token response.");
         }
         if (tokenResponse.get(ACCESS_TOKEN) == null){
-            throw new OIDCException(OIDCExceptionEnum.INSUFFICIENT_TOKEN, "Insufficient tokens");
+            throw new TokenRefreshException(TokenRefreshException.Cause.INSUFFICIENT, "Insufficient tokens");
         }
         OIDCTokenTransferObject result = new OIDCTokenTransferObject();
         if (tokenResponse.get(ID_TOKEN) != null && !String.valueOf(tokenResponse.get(ID_TOKEN)).isEmpty()){
@@ -180,26 +203,27 @@ public class KeycloakProvider extends AbstractOIDCProvider {
     }
 
     @Override
-    public void verifyToken(final OIDCTokenTransferObject tto) throws OIDCException {
+    public void verifyToken(final OIDCTokenTransferObject tto, final String nonce) throws TokenVerifyException {
+        IDTokenVerifier.verifyToken(tto.getIdToken(), this.oidcConfig, nonce);
         try{
-            RSAJWKSVerifier.verifyToken(this.restfulUtil, this.oidcConfig.getJwksUri(), tto.getIdToken(), this.oidcConfig.getClientId());
-            RSAJWKSVerifier.verifyToken(this.restfulUtil, this.oidcConfig.getJwksUri(), tto.getAccessToken(), null);
+            RSAJWKSVerifier.verifyToken(this.restfulUtil, this.oidcConfig.getJwksUri(), tto.getIdToken());
+            RSAJWKSVerifier.verifyToken(this.restfulUtil, this.oidcConfig.getJwksUri(), tto.getAccessToken());
         }catch(JWKSException je){
-            throw new OIDCException(OIDCExceptionEnum.VERIFY_TOKEN, "JWKS Error:" + je.step.name() + "-" +  je.getMessage());
+            throw new TokenVerifyException(TokenVerifyException.Cause.JWKS, "JWKS Error:" + je.step.name() + "-" +  je.getMessage());
         }
     }
 
     @Override
-    public OIDCTokens generateTokens(final OIDCTokenTransferObject tto) throws RBACException{
+    public OIDCTokens generateTokens(final OIDCTokenTransferObject tto) throws TokenProcessingException{
         return new KeycloakTokens(tto);
     }
 
     @Override
-    public long extractAccessTokenExpirationTime(final OIDCTokens tokens) throws RBACException {
+    public long extractAccessTokenExpirationTime(final OIDCTokens tokens) throws TokenProcessingException {
         //-- Extract expiration time for access token.
         Map<String, Claim> accessTokenMap = OIDCUtil.parseJwtPayload(tokens.getAccessToken());
         if (accessTokenMap == null){
-            throw new RBACException("Invalid Access Token.");
+            throw new TokenProcessingException("Invalid Access Token.");
         }
         //-- Set default AccessTokenExpirationTime.
         long accessTokenExpireTimeoutSec = (System.currentTimeMillis() / 1000) + this.defaultAccessTokenDurationSec;
@@ -212,11 +236,11 @@ public class KeycloakProvider extends AbstractOIDCProvider {
     }
 
     @Override
-    public long extractRefreshTokenExpirationTime(final OIDCTokens tokens) throws RBACException {
+    public long extractRefreshTokenExpirationTime(final OIDCTokens tokens) throws TokenProcessingException {
         //-- Extract expiration time for refresh token.
         Map<String, Claim> refreshTokenMap = OIDCUtil.parseJwtPayload(tokens.getRefreshToken());
         if (refreshTokenMap == null){
-            throw new RBACException("Invalid Refresh Token.");
+            throw new TokenProcessingException("Invalid Refresh Token.");
         }
         long refreshTokenExpireTimeoutSec = (System.currentTimeMillis() / 1000) + this.defaultRefreshTokenDurationSec;
         Claim refTypClaim = refreshTokenMap.get("typ");
@@ -238,18 +262,18 @@ public class KeycloakProvider extends AbstractOIDCProvider {
      * @param response 서블릿 응답 객체
      * @param oidcSessionManager OIDC 세션 관리자. 내부 OIDC Logout을 수행하기 위해 필요.
      * @param clientLogoutAdapter Client Logout Adapter. 내부 OIDC Logout 전/후 처리를 위해 필요.
-     * @throws OIDCException OIDC 세션에 ID Token이 없을 경우를 포함한 OIDC 관련 예외 발생 시 던져진다.
+     * @throws AuthenticationCodeFlowException OIDC 세션에 ID Token이 없을 경우를 포함한 Token 관련 예외 발생 시 던져진다.
      * @throws IOException Redirect 동작이 존재할 경우, 실패 시 발생
      */
     @Override
     public void doOutboundIDPLogout(HttpServletRequest request, HttpServletResponse response,
-                                    OIDCSessionManager oidcSessionManager, ClientLogoutAdapter clientLogoutAdapter) throws OIDCException, IOException{
+                                    OIDCSessionManager oidcSessionManager, ClientLogoutAdapter clientLogoutAdapter) throws OIDCLogoutException, IOException{
         //-- process manual IDP logout.
         //-- 사용자에 의한 직접적인 Outbound Logout은 세션의 쿠키가 유지됨.
         String sessionId = OIDCUtil.getCookieValue(request, OIDCConstants.COOKIE_NAME);
         OIDCSession sObj = oidcSessionManager.getSessionBySessionID(sessionId);
         if (sObj == null) {
-            throw new OIDCException(OIDCExceptionEnum.OIDC_SESSION_EXCEPTION, "Not found session.");
+            throw new OIDCLogoutException(AuthenticationCodeFlowException.Cause.NO_OIDC_SESSION, "Not found session.");
         }
         //-- invalidate OIDC Session and legacy Session.
         OIDCUtil.doLogout(sObj.getSid(), request, response, oidcSessionManager,clientLogoutAdapter,true);
@@ -258,7 +282,7 @@ public class KeycloakProvider extends AbstractOIDCProvider {
         String idTokenHint = sObj.getTokens().getIDToken();
         if (idTokenHint == null || idTokenHint.isEmpty()) {
             LogUtil.error("Id Token Not found.", this);
-            throw new OIDCException(OIDCExceptionEnum.INSUFFICIENT_TOKEN, "Not found ID token.");
+            throw new OIDCLogoutException(AuthenticationCodeFlowException.Cause.INSUFFICIENT, "Not found ID token.");
         }
         String logoutUri = this.oidcConfig.getLogoutUri() + "?client_id=" + this.oidcConfig.getClientId() +
                 "&post_logout_redirect_uri=" + postLogoutRedirectUrl +
@@ -273,20 +297,24 @@ public class KeycloakProvider extends AbstractOIDCProvider {
      * @param response 서블릿 응답 객체
      * @param oidcSessionManager OIDC 세션 관리자. 내부 OIDC Logout을 수행하기 위해 필요.
      * @param clientLogoutAdapter Client Logout Adapter. 내부 OIDC Logout 전/후 처리를 위해 필요.
-     * @throws OIDCException Logout Token 검증 실패 또는 각종 로그아웃 관련 예외 발생 시 던져진다
+     * @throws AuthenticationCodeFlowException Logout Token 검증 실패 또는 각종 로그아웃 관련 예외 발생 시 던져진다
      */
     @Override
     public void doInboundIDPLogout(HttpServletRequest request, HttpServletResponse response,
-                                   OIDCSessionManager oidcSessionManager, ClientLogoutAdapter clientLogoutAdapter) throws OIDCException{
+                                   OIDCSessionManager oidcSessionManager, ClientLogoutAdapter clientLogoutAdapter) throws OIDCLogoutException{
         if (request.getMethod().equals(HttpMethod.POST.name())) {
             //-- process IDP Back Channel logout.
             //-- Back Channel logout.
             String logoutToken = request.getParameter("logout_token");
             if (logoutToken == null){
                 LogUtil.error("No logout token received.", this);
-                throw new OIDCException(OIDCExceptionEnum.NULL_LOGOUT_TOKEN, "No logout token");
+                throw new OIDCLogoutException(AuthenticationCodeFlowException.Cause.NULL_VALUE, "Null logout token");
             }
-            RSAJWKSVerifier.verifyToken(this.restfulUtil, this.oidcConfig.getJwksUri(), logoutToken, null);
+            try {
+                RSAJWKSVerifier.verifyToken(this.restfulUtil, this.oidcConfig.getJwksUri(), logoutToken);
+            }catch(JWKSException je){
+                throw new OIDCLogoutException(AuthenticationCodeFlowException.Cause.INVALID, je.getLocalizedMessage());
+            }
             String sid = KeycloakUtil.extractSidFromLogoutToken(logoutToken);
             if (oidcSessionManager.getSessionBySID(sid) == null){
                 LogUtil.info("[" + sid + "] Already logged out.", this);
@@ -299,7 +327,7 @@ public class KeycloakProvider extends AbstractOIDCProvider {
             //-- Front Channel logout.
             String sid = request.getParameter("sid");
             if (sid == null){
-                throw new OIDCException(OIDCExceptionEnum.NULL_LOGOUT_TOKEN, "No SID in front channel logout msg.");
+                throw new OIDCLogoutException(AuthenticationCodeFlowException.Cause.NO_SID, "No SID in front channel logout msg.");
             }
             if (oidcSessionManager.getSessionBySID(sid) == null){
                 LogUtil.info("[" + sid + "] Already logged out.", this);

@@ -30,6 +30,7 @@ public class OIDCDataTransferObject implements Serializable {
     private String sessionState;
     private String scope;
     private String codeVerifier;
+    private String nonce;
     /**
      * Request Session Id
      */
@@ -69,5 +70,11 @@ public class OIDCDataTransferObject implements Serializable {
     }
     public void setSessionId(String sessionId) {
         this.sessionId = sessionId;
+    }
+    public String getNonce() {
+        return nonce;
+    }
+    public void setNonce(String nonce) {
+        this.nonce = nonce;
     }
 }

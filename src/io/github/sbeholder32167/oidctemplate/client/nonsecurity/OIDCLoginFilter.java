@@ -14,12 +14,10 @@ package io.github.sbeholder32167.oidctemplate.client.nonsecurity;
 
 import io.github.sbeholder32167.oidctemplate.adapter.ClientAuthConvertAdapter;
 import io.github.sbeholder32167.oidctemplate.adapter.ClientLegacySessionAdapter;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCException;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCExceptionEnum;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCExceptionHandler;
+import io.github.sbeholder32167.oidctemplate.client.exception.*;
+import io.github.sbeholder32167.oidctemplate.adapter.ClientOIDCExceptionAdapter;
 import io.github.sbeholder32167.oidctemplate.client.OIDCDataTransferObject;
 import io.github.sbeholder32167.oidctemplate.client.OIDCTokenTransferObject;
-import io.github.sbeholder32167.oidctemplate.client.exception.RBACException;
 import io.github.sbeholder32167.oidctemplate.client.provider.OIDCProvider;
 import io.github.sbeholder32167.oidctemplate.client.tokens.OIDCTokens;
 import io.github.sbeholder32167.oidctemplate.client.session.OIDCSessionManager;
@@ -52,7 +50,7 @@ public class OIDCLoginFilter extends GenericFilterBean {
     private final ClientAuthConvertAdapter authConvertAdapter;
     private final ClientLegacySessionAdapter clientLegacySessionAdapter;
     private final OIDCSessionManager oidcSessionManager;
-    private OIDCExceptionHandler exceptionHandler;
+    private ClientOIDCExceptionAdapter exceptionHandler;
     private final OIDCAuthSuccessHandler successHandler;
     private final OIDCAuthFailureHandler failureHandler;
 
@@ -71,7 +69,7 @@ public class OIDCLoginFilter extends GenericFilterBean {
         this.clientLegacySessionAdapter = clientLegacySessionAdapter;
         this.oidcSessionManager = oidcSessionManager;
     }
-    public void setExceptionHandler(final OIDCExceptionHandler exceptionHandler){
+    public void setExceptionHandler(final ClientOIDCExceptionAdapter exceptionHandler){
         this.exceptionHandler = exceptionHandler;
     }
 
@@ -83,12 +81,21 @@ public class OIDCLoginFilter extends GenericFilterBean {
             chain.doFilter(request, response);
             return;
         }
-        OIDCAuthObj oidcAuthObj = this.attemptAuthentication(request, response);
-        if (oidcAuthObj == null){
-            OIDCException oe = new OIDCException(OIDCExceptionEnum.OIDC_SESSION_EXCEPTION, "Null OIDC Session.");
+        OIDCAuthObj oidcAuthObj;
+        try{
+            oidcAuthObj = this.attemptAuthentication(request, response);
+        }catch(OIDCException oe){
             LogUtil.error(oe.getLocalizedMessage(), this);
             if (this.exceptionHandler != null){
-                this.exceptionHandler.handleException(oe.getStep(), oe, request, response);
+                this.exceptionHandler.handleException(oe, request, response);
+            }
+            return;
+        }
+        if (oidcAuthObj == null){
+            OIDCAuthenticationException oae = new OIDCAuthenticationException("Null OIDC Session.");
+            LogUtil.error(oae.getLocalizedMessage(), this);
+            if (this.exceptionHandler != null){
+                this.exceptionHandler.handleException(oae, request, response);
             }
             return;
         }
@@ -99,7 +106,7 @@ public class OIDCLoginFilter extends GenericFilterBean {
         } catch (OIDCException e) {
             LogUtil.error(e.getLocalizedMessage(), this);
             if (this.exceptionHandler != null){
-                this.exceptionHandler.handleException(e.getStep(), e, request, response);
+                this.exceptionHandler.handleException(e, request, response);
             }
             this.failureHandler.onAuthenticationFailure(request,response, e);
             return;
@@ -122,19 +129,18 @@ public class OIDCLoginFilter extends GenericFilterBean {
      * @param request 서블릿 요청 객체
      * @param response 서블릿 응답 객체
      * @return OIDC Token과 레거시 세션 객체를 담은 클래스.
+     * @throws OIDCException 각종 OIDC 인증 관련 예외
      * @throws IOException OIDC 인증 페이지 Redirect 실패 시 발생
      */
-    private OIDCAuthObj attemptAuthentication(HttpServletRequest request, HttpServletResponse response) throws IOException {
+    private OIDCAuthObj attemptAuthentication(HttpServletRequest request, HttpServletResponse response) throws OIDCException, IOException {
         final String requestURI = request.getRequestURI();
         //-- Entry Logic
         if (requestURI.contains(this.entryUri)) {
             try {
                 this.oidcProvider.redirectIDPAuthPage(request, response, this.redirectUri);
-            }catch(OIDCException oe){
-                LogUtil.error(oe.getLocalizedMessage(), this);
-                if (this.exceptionHandler != null){
-                    this.exceptionHandler.handleException(oe.getStep(), oe, request, response);
-                }
+            }catch(AuthenticationCodeFlowException acfe){
+                LogUtil.error(acfe.getLocalizedMessage(), this);
+                throw acfe;
             }
             return null;
         }else if (requestURI.contains(this.redirectUri)) {
@@ -142,72 +148,58 @@ public class OIDCLoginFilter extends GenericFilterBean {
             OIDCDataTransferObject dto;
             try {
                 dto = this.oidcProvider.checkParameters(request);
-            }catch(OIDCException oe){
-                LogUtil.error(oe.getLocalizedMessage(), this);
-                if (this.exceptionHandler != null){
-                    this.exceptionHandler.handleException(oe.getStep(), oe, request, response);
-                }
-                return null;
+            }catch(AuthenticationCodeFlowException acfe){
+                LogUtil.error(acfe.getLocalizedMessage(), this);
+                throw acfe;
             }
             //-- Session refresh section.(if required)
             //-- set Servlet request Session ID after refresh.
             String sessionId;
             try {
                 sessionId = OIDCUtil.extractSessionId(request);
-            } catch (OIDCException e) {
+            } catch (NoWasSessionException e) {
                 LogUtil.error(e.getLocalizedMessage(), this);
-                if (this.exceptionHandler != null){
-                    this.exceptionHandler.handleException(e.getStep(), e, request, response);
-                }
-                return null;
+                throw e;
             }
             dto.setSessionId(sessionId);
             OIDCTokenTransferObject tto;
             try {
                 tto = this.oidcProvider.acquireTokens(dto, OIDCUtil.buildFullUrl(request, redirectUri));
-            } catch (OIDCException e) {
-                if (e.getStep() == OIDCExceptionEnum.NULL_TOKEN_RESPONSE){
+            } catch (AuthenticationCodeFlowException  acfe) {
+                if (acfe.getExpCause() == AuthenticationCodeFlowException.Cause.NULL_VALUE){
                     LogUtil.error("No response from token endpoint.", this);
-                }else if (e.getStep() == OIDCExceptionEnum.INSUFFICIENT_TOKEN){
+                }else if (acfe.getExpCause() == AuthenticationCodeFlowException.Cause.INSUFFICIENT){
                     LogUtil.error("Invalid token response from token endpoint.", this);
                 }
-                if (this.exceptionHandler != null){
-                    this.exceptionHandler.handleException(e.getStep(), e, request, response);
-                }
-                return null;
+                throw acfe;
             }
             if (tto == null){
                 LogUtil.error("Null token response.", this);
-                return null;
+                throw new AuthenticationCodeFlowException(AuthenticationCodeFlowException.Step.TOKEN_EXCHANGE,
+                        AuthenticationCodeFlowException.Cause.NULL_VALUE, "Null token response");
             }
 
             //-- Token verify process (JWKS)
             try{
-                this.oidcProvider.verifyToken(tto);
-            } catch (OIDCException e) {
-                LogUtil.error("JWKS Error:" + e.getStep().name() + "-" + e.getMessage(), this);
-                if (this.exceptionHandler != null){
-                    this.exceptionHandler.handleException(e.getStep(), e, request, response);
-                }
-                return null;
+                this.oidcProvider.verifyToken(tto, dto.getNonce());
+            } catch (TokenVerifyException tfe) {
+                LogUtil.error("JWKS Error:" + tfe.getCategory().name() + "-" + tfe.getMessage(), this);
+                throw tfe;
             }
             LogUtil.info("Token verifying has been completed successfully.", this);
-
             try {
                 OIDCTokens oidcTokens = this.oidcProvider.generateTokens(tto);
                 Object legacySessionObj = this.authConvertAdapter.buildAuthenticationUsingToken(tto);
                 return new OIDCAuthObj(oidcTokens, legacySessionObj);
-            } catch (RBACException e) {
+            } catch(TokenProcessingException tpe) {
                 //-- OIDC Login fail. 비지니스 로직에 맞게 구현 필요
-                LogUtil.error(e.getMessage(), this);
-                if (this.exceptionHandler != null){
-                    this.exceptionHandler.handleException(e.getStep(), e, request, response);
-                }
-                return null;
+                LogUtil.error(tpe.getMessage(), this);
+                throw tpe;
             }
         }else{
             LogUtil.error("Not Specified URI:" + requestURI, this);
-            return null;
+            throw new AuthenticationCodeFlowException(AuthenticationCodeFlowException.Step.IDP_AUTH_REDIRECT,
+                    AuthenticationCodeFlowException.Cause.INVALID, "Not specified URI" + requestURI);
         }
     }
 

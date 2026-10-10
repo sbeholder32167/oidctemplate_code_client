@@ -17,24 +17,18 @@ import io.github.sbeholder32167.oidctemplate.adapter.ClientLogoutAdapter;
 import io.github.sbeholder32167.oidctemplate.client.config.OIDCConfig;
 import io.github.sbeholder32167.oidctemplate.client.OIDCDataTransferObject;
 import io.github.sbeholder32167.oidctemplate.client.OIDCTokenTransferObject;
-import io.github.sbeholder32167.oidctemplate.client.exception.RBACException;
+import io.github.sbeholder32167.oidctemplate.client.exception.*;
 import io.github.sbeholder32167.oidctemplate.client.provider.AbstractOIDCProvider;
 import io.github.sbeholder32167.oidctemplate.client.session.OIDCSession;
 import io.github.sbeholder32167.oidctemplate.client.session.OIDCSessionManager;
 import io.github.sbeholder32167.oidctemplate.client.session.storage.OIDCAuthParameterStorage;
 import io.github.sbeholder32167.oidctemplate.client.tokens.OIDCTokens;
 import io.github.sbeholder32167.oidctemplate.client.tokens.impl.GoogleTokens;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCException;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCExceptionEnum;
-import io.github.sbeholder32167.oidctemplate.jwks.RSAJWKSVerifier;
-import io.github.sbeholder32167.oidctemplate.jwks.exception.JWKSException;
+import io.github.sbeholder32167.oidctemplate.verify.IDTokenVerifier;
+import io.github.sbeholder32167.oidctemplate.verify.RSAJWKSVerifier;
 import io.github.sbeholder32167.oidctemplate.rest.RestfulUtil;
 import io.github.sbeholder32167.oidctemplate.util.LogUtil;
 import io.github.sbeholder32167.oidctemplate.util.OIDCUtil;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -66,14 +60,21 @@ public class GoogleProvider extends AbstractOIDCProvider {
     }
 
     @Override
-    public void redirectIDPAuthPage(HttpServletRequest request, HttpServletResponse response, String redirectUri) throws OIDCException, IOException {
+    public void redirectIDPAuthPage(HttpServletRequest request, HttpServletResponse response, String redirectUri) throws AuthenticationCodeFlowException, IOException {
         String redirectUrl;
         if (redirectUri == null){
             redirectUrl = this.oidcConfig.getRedirectUri();
         }else{
             redirectUrl = OIDCUtil.buildFullUrl(request, redirectUri);
         }
-        String sessionId = OIDCUtil.extractSessionId(request);
+        String sessionId;
+        try {
+            sessionId = OIDCUtil.extractSessionId(request);
+        }catch(NoWasSessionException ne){
+            throw new AuthenticationCodeFlowException(AuthenticationCodeFlowException.Step.IDP_AUTH_REDIRECT,
+                                                      AuthenticationCodeFlowException.Cause.NULL_WAS_SESSION_ID,
+                                                      ne.getMessage());
+        }
         String state = OIDCUtil.generateState(16);
         this.oidcAuthParameterStorage.setRequestParameter(STATE_ATTR, state, sessionId);
         String nonce = UUID.randomUUID().toString();
@@ -88,6 +89,8 @@ public class GoogleProvider extends AbstractOIDCProvider {
         //-- if needed refresh token.
         if (accessType.equalsIgnoreCase("offline")){
             builder.append("&access_type=offline&prompt=consent");
+        }else{
+            builder.append("&prompt=select_account");
         }
         if (this.oidcConfig.isUsePkce()){
             String codeVerifier = OIDCUtil.generateCodeVerifier();
@@ -103,25 +106,36 @@ public class GoogleProvider extends AbstractOIDCProvider {
     }
 
     @Override
-    public OIDCDataTransferObject checkParameters(HttpServletRequest request) throws OIDCException {
+    public OIDCDataTransferObject checkParameters(HttpServletRequest request) throws AuthenticationCodeFlowException {
         String state = request.getParameter("state");
         String code = request.getParameter("code");
         String sessionState = request.getParameter("session_state");
-        String sessionId = OIDCUtil.extractSessionId(request);
+        String sessionId;
+        try {
+            sessionId = OIDCUtil.extractSessionId(request);
+        }catch(NoWasSessionException ne){
+            throw new AuthenticationCodeFlowException(AuthenticationCodeFlowException.Step.CHECK_PARAMETERS,
+                                                      AuthenticationCodeFlowException.Cause.NULL_WAS_SESSION_ID,
+                                                      ne.getMessage());
+        }
         String savedState = String.valueOf(this.oidcAuthParameterStorage.getRequestParameterValue(STATE_ATTR, true, sessionId));
         String codeVerifier = String.valueOf(this.oidcAuthParameterStorage.getRequestParameterValue(PKCE_ATTR, true, sessionId));
+        String nonce = String.valueOf(this.oidcAuthParameterStorage.getRequestParameterValue(NONCE_ATTR, true, sessionId));
         String scope = this.oidcConfig.getScope();
         if (state == null || state.isEmpty() ||
                 code == null || code.isEmpty() ||
                 savedState == null || savedState.isEmpty() ||
                 scope == null || scope.isEmpty() ||
                 codeVerifier == null || codeVerifier.isEmpty()){
-            throw new OIDCException(OIDCExceptionEnum.CHECK_PARAMETERS, "Not enough parameters.");
+            throw new AuthenticationCodeFlowException(AuthenticationCodeFlowException.Step.CHECK_PARAMETERS,
+                                                      AuthenticationCodeFlowException.Cause.INSUFFICIENT,
+                                                      "Not enough parameters.");
         }
         //-- Compare State in Session.
         if (!savedState.equals(state)) {
-            // NOSONAR throw new BadCredentialsException("Invalid OIDC State");
-            throw new OIDCException(OIDCExceptionEnum.CHECK_STATE, "Invalid state.");
+            throw new AuthenticationCodeFlowException(AuthenticationCodeFlowException.Step.CHECK_STATE,
+                                                      AuthenticationCodeFlowException.Cause.INVALID,
+                                                      "Invalid state.");
         }
         //-- Session clear.
         request.getSession().removeAttribute(STATE_ATTR);
@@ -134,23 +148,26 @@ public class GoogleProvider extends AbstractOIDCProvider {
         result.setScope(scope);
         result.setCodeVerifier(codeVerifier);
         result.setSessionState(sessionState);
+        result.setNonce(nonce);
         //-- 만약 보안을 위해 Session을 refresh할 경우, 여기서 session Id를 넣는 것은 무의미하다.
         // NOSONAR result.setSessionId(sessionId);
         return result;
     }
 
     @Override
-    public OIDCTokenTransferObject acquireTokens(OIDCDataTransferObject dto, String redirectUri) throws OIDCException {
+    public OIDCTokenTransferObject acquireTokens(OIDCDataTransferObject dto, String redirectUri) throws AuthenticationCodeFlowException {
         Map<String, Object> tokenResponse = OIDCUtil.exchangeCodeForToken(
                 this.restfulUtil, this.oidcConfig,
                 dto.getCode(), dto.getCodeVerifier(), dto.getState(), dto.getSessionState(), dto.getScope(),
                 redirectUri);
         if (tokenResponse == null || tokenResponse.isEmpty()){
-            throw new OIDCException(OIDCExceptionEnum.NULL_TOKEN_RESPONSE, "Null Token response.");
+            throw new AuthenticationCodeFlowException(AuthenticationCodeFlowException.Step.TOKEN_EXCHANGE,
+                    AuthenticationCodeFlowException.Cause.NULL_VALUE, "Null Token response.");
         }
         //-- Refresh token is not mandatory token in Google IDP.
         if (!tokenResponse.containsKey(ACCESS_TOKEN)){
-            throw new OIDCException(OIDCExceptionEnum.INSUFFICIENT_TOKEN, "Insufficient tokens");
+            throw new AuthenticationCodeFlowException(AuthenticationCodeFlowException.Step.TOKEN_EXCHANGE,
+                    AuthenticationCodeFlowException.Cause.INSUFFICIENT, "Insufficient tokens");
         }
         OIDCTokenTransferObject result = new OIDCTokenTransferObject();
         if (tokenResponse.get(ID_TOKEN) != null && !String.valueOf(tokenResponse.get(ID_TOKEN)).isEmpty()){
@@ -170,17 +187,17 @@ public class GoogleProvider extends AbstractOIDCProvider {
         return result;
     }
 
-    public synchronized OIDCTokenTransferObject refreshTokens(final String refreshToken) throws OIDCException {
+    public synchronized OIDCTokenTransferObject refreshTokens(final String refreshToken) throws TokenRefreshException {
         if (refreshToken == null || refreshToken.isEmpty()){
             LogUtil.info("Not available refresh token.", this);
-            throw new OIDCException(OIDCExceptionEnum.INSUFFICIENT_TOKEN, "Not available refresh token.");
+            throw new TokenRefreshException(TokenRefreshException.Cause.INSUFFICIENT, "Not available refresh token.");
         }
         Map<String, Object> tokenResponse = OIDCUtil.refreshToken(this.restfulUtil, this.oidcConfig, refreshToken);
         if (tokenResponse == null || tokenResponse.isEmpty()){
-            throw new OIDCException(OIDCExceptionEnum.NULL_TOKEN_RESPONSE, "Null Token response.");
+            throw new TokenRefreshException(TokenRefreshException.Cause.NO_RESPONSE, "Null Token response.");
         }
         if (tokenResponse.get(ACCESS_TOKEN) == null){
-            throw new OIDCException(OIDCExceptionEnum.INSUFFICIENT_TOKEN, "Insufficient tokens");
+            throw new TokenRefreshException(TokenRefreshException.Cause.INSUFFICIENT, "Insufficient tokens");
         }
         OIDCTokenTransferObject result = new OIDCTokenTransferObject();
         if (tokenResponse.get(ID_TOKEN) != null && !String.valueOf(tokenResponse.get(ID_TOKEN)).isEmpty()){
@@ -203,69 +220,39 @@ public class GoogleProvider extends AbstractOIDCProvider {
     }
 
     @Override
-    public void verifyToken(final OIDCTokenTransferObject tto) throws OIDCException {
+    public void verifyToken(final OIDCTokenTransferObject tto, final String nonce) throws TokenVerifyException {
+        IDTokenVerifier.verifyToken(tto.getIdToken(), this.oidcConfig, nonce);
         try{
-            RSAJWKSVerifier.verifyToken(this.restfulUtil, this.oidcConfig.getJwksUri(), tto.getIdToken(), this.oidcConfig.getClientId());
+            RSAJWKSVerifier.verifyToken(this.restfulUtil, this.oidcConfig.getJwksUri(), tto.getIdToken());
         }catch(JWKSException je){
-            throw new OIDCException(OIDCExceptionEnum.VERIFY_TOKEN, "JWKS Error:" + je.step.name() + "-" +  je.getMessage());
+            throw new TokenVerifyException(TokenVerifyException.Cause.JWKS, "JWKS Error:" + je.step.name() + "-" +  je.getMessage());
         }
     }
 
     @Override
-    public OIDCTokens generateTokens(final OIDCTokenTransferObject tto) throws RBACException{
+    public OIDCTokens generateTokens(final OIDCTokenTransferObject tto) throws TokenProcessingException{
         return new GoogleTokens(tto);
     }
 
     @Override
     public void doOutboundIDPLogout(HttpServletRequest request, HttpServletResponse response,
-                                    OIDCSessionManager oidcSessionManager, ClientLogoutAdapter clientLogoutAdapter) throws OIDCException, IOException{
+                                    OIDCSessionManager oidcSessionManager, ClientLogoutAdapter clientLogoutAdapter) throws OIDCLogoutException, IOException{
         //-- process manual IDP logout.
-        //-- 사용자에 의한 직접적인 Outbound Logout은 세션의 쿠키가 유지됨.
+        //-- Google의 경우 IDP 동시 Logout 기능을 제공하지 않는다.
         String sessionId = OIDCUtil.getCookieValue(request, OIDCConstants.COOKIE_NAME);
         OIDCSession sObj = oidcSessionManager.getSessionBySessionID(sessionId);
         if (sObj == null) {
-            throw new OIDCException(OIDCExceptionEnum.OIDC_SESSION_EXCEPTION, "Not found session.");
-        }
-        //-- Google Provider의 경우 Token revoke만 존재
-        //-- Access Token or Refresh Token 하나만 폐기해줘도 된다. 오히려 두가지 모두 호출하는 것이 400 Error 를 발생.
-        this.revokeToken(sObj.getTokens().getAccessToken(), "access_token");
-        if (sObj.getTokens().getRefreshToken() != null && !sObj.getTokens().getRefreshToken().isEmpty()){
-            this.revokeToken(sObj.getTokens().getRefreshToken(), "refresh_token");
+            throw new OIDCLogoutException(AuthenticationCodeFlowException.Cause.NO_OIDC_SESSION, "Not found session.");
         }
         //-- invalidate OIDC Session and legacy Session.
         OIDCUtil.doLogout(sObj.getSid(), request, response, oidcSessionManager,clientLogoutAdapter,true);
-
-        // NOSONAR String postLogoutRedirectUrl = OIDCUtil.buildFullUrl(request, this.oidcConfig.getPostLogoutUri());
         String postLogoutRedirectUrl = this.oidcConfig.getPostLogoutUri();
         response.sendRedirect(postLogoutRedirectUrl);
     }
 
     @Override
     public void doInboundIDPLogout(HttpServletRequest request, HttpServletResponse response,
-                                   OIDCSessionManager oidcSessionManager, ClientLogoutAdapter clientLogoutAdapter) throws OIDCException{
+                                   OIDCSessionManager oidcSessionManager, ClientLogoutAdapter clientLogoutAdapter) throws OIDCLogoutException{
         /* Not implemented : Google Provider는 IDP 동시 Logout Order를 내리지 않는다. */
-    }
-
-    /**
-     * 토큰 취소 처리
-     * @param token Access Token ,Refresh Token.
-     */
-    private void revokeToken(final String token, final String tokenTypeHint){
-        HttpHeaders httpHeaders = new HttpHeaders();
-        httpHeaders.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-        String paramStr = "token=" + token + "&token_type_hint=" + tokenTypeHint;
-        ResponseEntity<Map> responseEntity = this.restfulUtil.doRestfulRawString(this.oidcConfig.getRevokeEndpoint(), HttpMethod.POST ,httpHeaders, paramStr, Map.class);
-        if(responseEntity.getStatusCode().value() != 200){
-            Map body = responseEntity.getBody();
-            if (body != null){
-                String errorStr = String.valueOf(body.get("error"));
-                String errorDescStr = String.valueOf(body.get("error_description"));
-                LogUtil.error("Error:" + errorStr + " " + errorDescStr, this);
-            }else{
-                LogUtil.error("Error:" + responseEntity.getStatusCode().value(), this);
-            }
-        }else{
-            LogUtil.info("The token has been revoked successfully.", this);
-        }
     }
 }

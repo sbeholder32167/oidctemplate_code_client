@@ -12,7 +12,7 @@
  */
 package io.github.sbeholder32167.oidctemplate.adapter;
 
-import io.github.sbeholder32167.oidctemplate.exception.OIDCException;
+import io.github.sbeholder32167.oidctemplate.client.exception.OIDCException;
 import io.github.sbeholder32167.oidctemplate.client.tokens.OIDCTokens;
 
 import javax.servlet.http.HttpServletRequest;

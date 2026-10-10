@@ -12,7 +12,7 @@
  */
 package io.github.sbeholder32167.oidctemplate.client.session.duplicatepolicy;
 
-import io.github.sbeholder32167.oidctemplate.client.exception.RBACException;
+import io.github.sbeholder32167.oidctemplate.client.exception.OIDCSessionDuplicateException;
 import io.github.sbeholder32167.oidctemplate.client.session.registry.OIDCSessionRegistry;
 
 /**
@@ -30,7 +30,7 @@ public interface OIDCSessionDuplicatePolicy {
      * 세션 중복 시 동작을 정의
      * @param duplicateCheckKey 중복 확인 키. OIDCTokens에 정의되어 있다.
      * @param sessionRegistry OIDC Session Registry
-     * @throws RBACException Session 등록을 중단시키기 위해 사용됨
+     * @throws OIDCSessionDuplicateException Session 등록을 중단시키기 위해 사용됨
      */
-    void onDuplicateOIDCSession(Object duplicateCheckKey, OIDCSessionRegistry sessionRegistry) throws RBACException;
+    void onDuplicateOIDCSession(Object duplicateCheckKey, OIDCSessionRegistry sessionRegistry) throws OIDCSessionDuplicateException;
 }

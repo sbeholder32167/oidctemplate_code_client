@@ -12,20 +12,28 @@
  */
 package io.github.sbeholder32167.oidctemplate.client.exception;
 
-import io.github.sbeholder32167.oidctemplate.exception.OIDCException;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCExceptionEnum;
-
 /**
- * RBAC 동작 Exception class
+ * 토큰 갱신 중 예외 정의<br>
  *
- * <p>RBAC 동작 관련 예외 Class</p>
+ * <p>토큰 갱신 동작 중 발생하는 예외 원인에 대해 정의.</p>
  *
  * @author sbeholder6684
  * @version 1.0.0
- * @since 2026-05-22
+ * @since 2026-10-09
  */
-public class RBACException extends OIDCException {
-    public RBACException(String message) {
-        super(OIDCExceptionEnum.RBAC, message);
+public class TokenRefreshException extends TokenProcessingException {
+    private final TokenRefreshException.Cause expCause;
+    public TokenRefreshException(TokenRefreshException.Cause expCause, String message) {
+        super(message);
+        this.expCause = expCause;
+    }
+    public Cause getExpCause(){
+        return this.expCause;
+    }
+
+    public enum Cause{
+        NO_OIDC_SESSION,
+        INSUFFICIENT,
+        NO_RESPONSE
     }
 }

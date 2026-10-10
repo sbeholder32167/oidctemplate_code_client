@@ -13,13 +13,11 @@
 package io.github.sbeholder32167.oidctemplate.client.provider;
 
 import io.github.sbeholder32167.oidctemplate.adapter.ClientLogoutAdapter;
+import io.github.sbeholder32167.oidctemplate.client.exception.*;
 import io.github.sbeholder32167.oidctemplate.client.session.OIDCSessionManager;
 import io.github.sbeholder32167.oidctemplate.client.tokens.OIDCTokens;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCException;
-import io.github.sbeholder32167.oidctemplate.jwks.exception.JWKSException;
 import io.github.sbeholder32167.oidctemplate.client.OIDCDataTransferObject;
 import io.github.sbeholder32167.oidctemplate.client.OIDCTokenTransferObject;
-import io.github.sbeholder32167.oidctemplate.client.exception.RBACException;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -44,68 +42,69 @@ public interface OIDCProvider {
      * @param request 서블릿 요청 객체
      * @param response 서블릿 응답 객체. Redirect에 활용.
      * @param redirectUri Login Filter에 정의된 Redirect URL.
-     * @throws OIDCException URL Encoding Exception
+     * @throws AuthenticationCodeFlowException URL Encoding Exception
      */
-    void redirectIDPAuthPage(HttpServletRequest request, HttpServletResponse response, final String redirectUri) throws OIDCException, IOException;
+    void redirectIDPAuthPage(HttpServletRequest request, HttpServletResponse response, final String redirectUri) throws AuthenticationCodeFlowException, IOException;
 
     /**
      * Parameter parsing. DTO 생성.<br> IDP 인증 후 Redirect URL로 진입할 경우 이용된다.<br>
      * Request Parameter (state, PKCE) 를 청소하기 좋은 위치이다.<br>
      * @param request 서블릿 요청 객체
      * @return Code, Code Verifier, state, Session State, Scope가 포함된 객체.
-     * @throws OIDCException Parameter / State check failed.
+     * @throws AuthenticationCodeFlowException Parameter / State check failed.
      */
-    OIDCDataTransferObject checkParameters(HttpServletRequest request) throws OIDCException;
+    OIDCDataTransferObject checkParameters(HttpServletRequest request) throws AuthenticationCodeFlowException;
 
     /**
      * IDP에서 Token을 가져온다
      * @param dto Code, Code Verifier, state, Session State, Scope가 포함된 객체.
      * @param redirectUri Redirect Uri
      * @return Token 객체.(ID Token, Access Token, Refresh Token)
-     * @throws OIDCException Token을 받지 못했거나 누락된 경우 던져진다
+     * @throws AuthenticationCodeFlowException Token을 받지 못했거나 누락된 경우 던져진다
      */
-    OIDCTokenTransferObject acquireTokens(OIDCDataTransferObject dto, final String redirectUri) throws OIDCException;
+    OIDCTokenTransferObject acquireTokens(OIDCDataTransferObject dto, final String redirectUri) throws AuthenticationCodeFlowException;
 
     /**
      * 토큰을 갱신한다
      * @param refreshToken Refresh Token
      * @return Token 객체.(ID Token, Access Token, Refresh Token)
-     * @throws OIDCException Token을 받지 못했거나 누락된 경우 던져진다
+     * @throws TokenRefreshException Token을 받지 못했거나 누락된 경우 던져진다
      */
-    OIDCTokenTransferObject refreshTokens(final String refreshToken) throws OIDCException;
+    OIDCTokenTransferObject refreshTokens(final String refreshToken) throws TokenRefreshException;
 
     /**
      * JWKS 토큰 검증<br>
      * Keycloak의 경우에는 Access Token 및 Logout Token까지 검증 가능하나, Google의 경우는 ID Token만 검증 가능.<br>
      * @param tto ID, Access 전체 포함 객체.
-     * @throws OIDCException 검증이 실패하면 발생하며, 내부적으로 {@link JWKSException}이 발생한다
+     * @param nonce 인증 Flow 시작 시 작성하여 서버로 보낸 임의의 값. 없을 경우 검증하지 않는다
+     * @throws TokenVerifyException 검증이 실패하면 발생한다. Claim 또는 JWKS 검증 모두 해당된다.
      */
-    void verifyToken(final OIDCTokenTransferObject tto) throws OIDCException;
+    void verifyToken(final OIDCTokenTransferObject tto, final String nonce) throws TokenVerifyException;
 
     /**
      * 각 Provider에 알맞은 OIDC Tokens를 생성한다.
      * @param tto ID, Access 전체 포함 객체.
      * @return 각 Provider 별 OIDC Tokens 객체. 토큰과 그것을 약간 파싱한 내역.
-     * @throws RBACException 필수 Claim이 없어서 초기 식별자를 파싱하지 못하여 정상적으로 OIDC Tokens 구현체를 생성하지 경우 발생.
+     * @throws TokenProcessingException 필수 Claim이 없어서 초기 식별자를 파싱하지 못하여 정상적으로 OIDC Tokens 구현체를 생성하지 경우 발생.
      */
-    OIDCTokens generateTokens(final OIDCTokenTransferObject tto) throws RBACException;
+    OIDCTokens generateTokens(final OIDCTokenTransferObject tto) throws TokenProcessingException;
 
     /**
      * Access Token의 만료시간을 추출<br>
      * OIDCSession Storage의 register 메서드에서 사용된다.<br>
      * @param tto OIDCTokens 객체. 내부 Access Token이 있어야 한다.
      * @return Access Token 만료시각(초)
-     * @throws RBACException Access Token이 null 또는 빈칸이거나 파싱 실패일 경우 던져진다
+     * @throws TokenProcessingException Access Token이 null 또는 빈칸이거나 파싱 실패일 경우 던져진다
      */
-    long extractAccessTokenExpirationTime(final OIDCTokens tto) throws RBACException;
+    long extractAccessTokenExpirationTime(final OIDCTokens tto) throws TokenProcessingException;
     /**
      * Refresh Token의 만료시간을 추출<br>
      * OIDCSession Storage의 register 메서드에서 사용된다.<br>
      * @param tto OIDCTokens 객체. 내부 Refresh Token이 있어야 한다.
      * @return Refresh Token 만료시각(초)
-     * @throws RBACException Refresh Token이 null 또는 빈칸이거나 파싱 실패일 경우 던져진다
+     * @throws TokenProcessingException Refresh Token이 null 또는 빈칸이거나 파싱 실패일 경우 던져진다
      */
-    long extractRefreshTokenExpirationTime(final OIDCTokens tto) throws RBACException;
+    long extractRefreshTokenExpirationTime(final OIDCTokens tto) throws TokenProcessingException;
 
     /**
      * Outbound IDP Logout을 수행한다.<br>
@@ -113,11 +112,11 @@ public interface OIDCProvider {
      * @param response 서블릿 응답 객체
      * @param oidcSessionManager OIDC 세션 관리자. 내부 OIDC Logout을 수행하기 위해 필요.
      * @param clientLogoutAdapter Client Logout Adapter. 내부 OIDC Logout 전/후 처리를 위해 필요.
-     * @throws OIDCException OIDC 세션에 ID Token이 없을 경우를 포함한 OIDC 관련 예외 발생 시 던져진다.
+     * @throws OIDCLogoutException OIDC 세션에 ID Token이 없을 경우를 포함한 Logout 로직 관련 예외 발생 시 던져진다.
      * @throws IOException Redirect 동작이 존재할 경우, 실패 시 발생
      */
     void doOutboundIDPLogout(HttpServletRequest request, HttpServletResponse response,
-                             OIDCSessionManager oidcSessionManager, ClientLogoutAdapter clientLogoutAdapter) throws OIDCException, IOException;
+                             OIDCSessionManager oidcSessionManager, ClientLogoutAdapter clientLogoutAdapter) throws OIDCLogoutException, IOException;
 
     /**
      * Inbound IDP Logout에 대응하여 수행.<br>
@@ -125,8 +124,8 @@ public interface OIDCProvider {
      * @param response 서블릿 응답 객체
      * @param oidcSessionManager OIDC 세션 관리자. 내부 OIDC Logout을 수행하기 위해 필요.
      * @param clientLogoutAdapter Client Logout Adapter. 내부 OIDC Logout 전/후 처리를 위해 필요.
-     * @throws OIDCException Logout Token 검증 실패 또는 각종 로그아웃 관련 예외 발생 시 던져진다
+     * @throws OIDCLogoutException Logout Token 검증 실패 또는 각종 로그아웃 관련 예외 발생 시 던져진다
      */
     void doInboundIDPLogout(HttpServletRequest request, HttpServletResponse response,
-                            OIDCSessionManager oidcSessionManager, ClientLogoutAdapter clientLogoutAdapter) throws OIDCException;
+                            OIDCSessionManager oidcSessionManager, ClientLogoutAdapter clientLogoutAdapter) throws OIDCLogoutException;
 }

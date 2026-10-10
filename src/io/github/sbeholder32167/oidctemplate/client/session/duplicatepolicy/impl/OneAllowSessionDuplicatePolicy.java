@@ -12,7 +12,7 @@
  */
 package io.github.sbeholder32167.oidctemplate.client.session.duplicatepolicy.impl;
 
-import io.github.sbeholder32167.oidctemplate.client.exception.RBACException;
+import io.github.sbeholder32167.oidctemplate.client.exception.OIDCSessionDuplicateException;
 import io.github.sbeholder32167.oidctemplate.client.session.duplicatepolicy.OIDCSessionDuplicatePolicy;
 import io.github.sbeholder32167.oidctemplate.client.session.registry.OIDCSessionRegistry;
 import io.github.sbeholder32167.oidctemplate.util.LogUtil;
@@ -32,7 +32,7 @@ import io.github.sbeholder32167.oidctemplate.util.LogUtil;
 //-- XML Bean 등록
 public class OneAllowSessionDuplicatePolicy implements OIDCSessionDuplicatePolicy {
     @Override
-    public void onDuplicateOIDCSession(Object duplicateCheckKey, OIDCSessionRegistry sessionRegistry) throws RBACException {
+    public void onDuplicateOIDCSession(Object duplicateCheckKey, OIDCSessionRegistry sessionRegistry) throws OIDCSessionDuplicateException {
         LogUtil.info("Session Policy : One allow.", this);
         //-- Lazy Invalidate Exist Session.
         if (sessionRegistry.getDuplicatedSessionCount(duplicateCheckKey) > 0){

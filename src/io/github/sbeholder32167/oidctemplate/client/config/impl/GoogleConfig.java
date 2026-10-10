@@ -13,7 +13,7 @@
 package io.github.sbeholder32167.oidctemplate.client.config.impl;
 
 import io.github.sbeholder32167.oidctemplate.client.config.OIDCConfig;
-import io.github.sbeholder32167.oidctemplate.client.exception.RBACException;
+import io.github.sbeholder32167.oidctemplate.client.exception.ConfigException;
 import io.github.sbeholder32167.oidctemplate.rest.RestfulUtil;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -41,11 +41,11 @@ public class GoogleConfig extends OIDCConfig {
     }
 
     @PostConstruct
-    private void initialize() throws RBACException {
+    private void initialize() throws ConfigException {
         final String googleDiscoveryUrl = "https://accounts.google.com/.well-known/openid-configuration";
         ResponseEntity<OIDCConfig> response = this.restfulUtil.doRestful(googleDiscoveryUrl, HttpMethod.GET, new HttpHeaders(), null, OIDCConfig.class);
         if (response == null || response.getStatusCode().value() != 200){
-            throw new RBACException("Failed to load Google configuration.");
+            throw new ConfigException("Failed to load Google configuration.");
         }
         this.issuer = response.getBody().getIssuer();
         this.authenticationEndpoint = response.getBody().getAuthenticationEndpoint();

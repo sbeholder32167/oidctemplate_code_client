@@ -13,9 +13,9 @@
 package io.github.sbeholder32167.oidctemplate.client;
 
 import io.github.sbeholder32167.oidctemplate.adapter.ClientLogoutAdapter;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCException;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCExceptionEnum;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCExceptionHandler;
+import io.github.sbeholder32167.oidctemplate.client.exception.AuthenticationCodeFlowException;
+import io.github.sbeholder32167.oidctemplate.adapter.ClientOIDCExceptionAdapter;
+import io.github.sbeholder32167.oidctemplate.client.exception.OIDCLogoutException;
 import io.github.sbeholder32167.oidctemplate.client.provider.OIDCProvider;
 import io.github.sbeholder32167.oidctemplate.client.session.OIDCSessionManager;
 import io.github.sbeholder32167.oidctemplate.util.LogUtil;
@@ -69,8 +69,8 @@ public class OIDCLogoutFilter extends OncePerRequestFilter {
     /**
      * 예외 처리 핸들러
      */
-    private OIDCExceptionHandler exceptionHandler;
-    public void setExceptionHandler(final OIDCExceptionHandler exceptionHandler){
+    private ClientOIDCExceptionAdapter exceptionHandler;
+    public void setExceptionHandler(final ClientOIDCExceptionAdapter exceptionHandler){
         this.exceptionHandler = exceptionHandler;
     }
 
@@ -80,31 +80,29 @@ public class OIDCLogoutFilter extends OncePerRequestFilter {
         if (requestURI.contains(this.manualLogoutUri)) {
             try {
                 this.oidcProvider.doOutboundIDPLogout(request, response, this.oidcSessionManager, this.clientLogoutAdapter);
-            } catch (OIDCException e) {
-                this.handleException(e, request, response);
+            } catch (AuthenticationCodeFlowException acfe) {
+                this.handleException(acfe, request, response);
             }catch (IOException e) {
                 LogUtil.error("Exception while OIDC Logout:redirect Exception", this);
-                if (this.exceptionHandler != null){
-                    this.exceptionHandler.handleException(OIDCExceptionEnum.IDP_LOGOUT_EXCEPTION, e, request, response);
-                }else{
-                    response.sendRedirect("/");
-                }
+                OIDCLogoutException ole = new OIDCLogoutException(AuthenticationCodeFlowException.Cause.REDIRECT,
+                        "Redirect Exception.");
+                this.handleException(ole, request, response);
             }
         } else if (requestURI.contains(this.idpLogoutUri)) {
             try{
                 this.oidcProvider.doInboundIDPLogout(request, response, this.oidcSessionManager, this.clientLogoutAdapter);
-            }catch (OIDCException e) {
-                this.handleException(e, request, response);
+            }catch (AuthenticationCodeFlowException acfe) {
+                this.handleException(acfe, request, response);
             }
         }else{
             filterChain.doFilter(request, response);
         }
     }
 
-    private void handleException(OIDCException oe, HttpServletRequest request, HttpServletResponse response) throws IOException {
+    private void handleException(AuthenticationCodeFlowException oe, HttpServletRequest request, HttpServletResponse response) throws IOException {
         LogUtil.error("Exception while OIDC Logout:" + oe.getMessage(), this);
         if (this.exceptionHandler != null){
-            this.exceptionHandler.handleException(oe.getStep(), oe, request, response);
+            this.exceptionHandler.handleException(oe, request, response);
         }else{
             response.sendRedirect("/");
         }

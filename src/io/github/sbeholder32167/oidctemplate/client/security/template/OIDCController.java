@@ -15,10 +15,9 @@ package io.github.sbeholder32167.oidctemplate.client.security.template;
 import io.github.sbeholder32167.oidctemplate.OIDCConstants;
 import io.github.sbeholder32167.oidctemplate.adapter.ClientLogoutAdapter;
 import io.github.sbeholder32167.oidctemplate.adapter.ClientAuthConvertAdapter;
+import io.github.sbeholder32167.oidctemplate.client.exception.*;
 import io.github.sbeholder32167.oidctemplate.client.security.OIDCAuthFailureHandler;
 import io.github.sbeholder32167.oidctemplate.client.security.OIDCAuthSuccessHandler;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCException;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCExceptionEnum;
 import io.github.sbeholder32167.oidctemplate.client.config.OIDCConfig;
 import io.github.sbeholder32167.oidctemplate.client.OIDCDataTransferObject;
 import io.github.sbeholder32167.oidctemplate.client.OIDCTokenTransferObject;
@@ -27,7 +26,6 @@ import io.github.sbeholder32167.oidctemplate.client.session.OIDCSession;
 import io.github.sbeholder32167.oidctemplate.client.session.OIDCSessionManager;
 import io.github.sbeholder32167.oidctemplate.client.OIDCEndpointsInterface;
 import io.github.sbeholder32167.oidctemplate.util.OIDCUtil;
-import io.github.sbeholder32167.oidctemplate.client.exception.RBACException;
 import io.github.sbeholder32167.oidctemplate.client.provider.OIDCProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -83,8 +81,8 @@ public class OIDCController implements OIDCEndpointsInterface {
     public void redirectOIDCAuthentication(HttpServletRequest request, HttpServletResponse response) throws IOException{
         try {
             this.provider.redirectIDPAuthPage(request, response, REDIRECT_URI);
-        }catch(OIDCException oe){
-            log.error("Exception:{}",oe.getLocalizedMessage());
+        }catch(AuthenticationCodeFlowException acfe){
+            log.error("Exception:{}",acfe.getLocalizedMessage());
             response.sendRedirect("/error=oidc_auth");
         }
     }
@@ -96,15 +94,14 @@ public class OIDCController implements OIDCEndpointsInterface {
         OIDCDataTransferObject dto = null;
         try {
             dto = this.provider.checkParameters(request);
-        }catch(OIDCException oe){
-            log.error(oe.getLocalizedMessage());
-            if (oe.getStep() == OIDCExceptionEnum.CHECK_PARAMETERS){
+        }catch(AuthenticationCodeFlowException acfe){
+            log.error(acfe.getLocalizedMessage());
+            if (acfe.getStep() == AuthenticationCodeFlowException.Step.CHECK_PARAMETERS){
                 response.sendRedirect("/error=parameters");
-                return;
-            }else if (oe.getStep() == OIDCExceptionEnum.CHECK_STATE){
+            }else if (acfe.getStep() == AuthenticationCodeFlowException.Step.CHECK_STATE){
                 response.sendRedirect("/error=state");
-                return;
             }
+            return;
         }
         if (dto == null){
             response.sendRedirect("/error=oidc");
@@ -115,12 +112,12 @@ public class OIDCController implements OIDCEndpointsInterface {
         OIDCTokenTransferObject tto = null;
         try {
             tto = this.provider.acquireTokens(dto, OIDCUtil.buildFullUrl(request, REDIRECT_URI));
-        } catch (OIDCException e) {
-            if (e.getStep() == OIDCExceptionEnum.NULL_TOKEN_RESPONSE){
+        } catch (AuthenticationCodeFlowException acfe) {
+            if (acfe.getExpCause() == AuthenticationCodeFlowException.Cause.NULL_VALUE){
                 log.error("No response from token endpoint.");
                 response.sendRedirect("/error=no_token");
                 return;
-            }else if (e.getStep() == OIDCExceptionEnum.INSUFFICIENT_TOKEN){
+            }else if (acfe.getExpCause() == AuthenticationCodeFlowException.Cause.INSUFFICIENT){
                 log.error("Invalid token response from token endpoint.");
                 response.sendRedirect("/error=invalid_token");
                 return;
@@ -134,9 +131,9 @@ public class OIDCController implements OIDCEndpointsInterface {
 
         //-- Token verify process (JWKS)
         try{
-            this.provider.verifyToken(tto);
-        } catch (OIDCException e) {
-            log.error("JWKS Error:{}-{}", e.getStep().name(), e.getMessage());
+            this.provider.verifyToken(tto, dto.getNonce());
+        } catch (TokenVerifyException tve) {
+            log.error("JWKS Error:{}-{}", tve.getCategory().name(), tve.getMessage());
             response.sendRedirect("/error=verify_token");
             return;
         }
@@ -151,7 +148,7 @@ public class OIDCController implements OIDCEndpointsInterface {
         Authentication authentication;
         try {
             authentication = (Authentication)this.authConvertAdapter.buildAuthenticationUsingToken(tto);
-        } catch (RBACException e) {
+        } catch (TokenConvertException tce) {
             //-- OIDC Login fail. 비지니스 로직에 맞게 구현 필요
             response.sendRedirect("/error=build_token");
             return;
@@ -206,7 +203,7 @@ public class OIDCController implements OIDCEndpointsInterface {
                                            @RequestParam(value = "iss", required = false) String iss) throws IOException {
         try {
             this.provider.doInboundIDPLogout(request, response, this.sessionManager, this.logoutAdapter);
-        } catch (OIDCException e) {
+        } catch (AuthenticationCodeFlowException e) {
             log.error(e.getLocalizedMessage());
         }
         response.sendRedirect(request.getContextPath() + this.config.getPostLogoutUri());
@@ -222,7 +219,7 @@ public class OIDCController implements OIDCEndpointsInterface {
     public void handleBackChannelLogout(HttpServletRequest request, HttpServletResponse response) throws IOException{
         try {
             this.provider.doInboundIDPLogout(request, response, this.sessionManager, this.logoutAdapter);
-        } catch (OIDCException e) {
+        } catch (AuthenticationCodeFlowException e) {
             log.error(e.getLocalizedMessage());
         }
         response.sendRedirect(request.getContextPath() + this.config.getPostLogoutUri());
@@ -238,7 +235,7 @@ public class OIDCController implements OIDCEndpointsInterface {
     public void doLogoutManually(HttpServletRequest request, HttpServletResponse response) throws IOException {
         try {
             this.provider.doOutboundIDPLogout(request, response, this.sessionManager, this.logoutAdapter);
-        } catch (OIDCException | IOException e) {
+        } catch (AuthenticationCodeFlowException | IOException e) {
             log.error(e.getLocalizedMessage());
         }
     }
@@ -263,7 +260,7 @@ public class OIDCController implements OIDCEndpointsInterface {
             log.info("Refresh Token:{}", tto.getRefreshToken());
             log.info("Access Expires In:{}", tto.getExpiresIn());
             log.info("Refresh Expires In:{}", tto.getRefreshExpiresIn());
-        } catch (OIDCException e) {
+        } catch (TokenProcessingException e) {
             log.error(e.getLocalizedMessage());
         }
         return "redirect:/";

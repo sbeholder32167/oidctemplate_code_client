@@ -13,11 +13,9 @@
 package io.github.sbeholder32167.oidctemplate.client.security;
 
 import io.github.sbeholder32167.oidctemplate.adapter.ClientAuthConvertAdapter;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCException;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCExceptionEnum;
+import io.github.sbeholder32167.oidctemplate.client.exception.*;
 import io.github.sbeholder32167.oidctemplate.client.OIDCDataTransferObject;
 import io.github.sbeholder32167.oidctemplate.client.OIDCTokenTransferObject;
-import io.github.sbeholder32167.oidctemplate.client.exception.RBACException;
 import io.github.sbeholder32167.oidctemplate.client.provider.OIDCProvider;
 import io.github.sbeholder32167.oidctemplate.client.tokens.OIDCTokens;
 import io.github.sbeholder32167.oidctemplate.client.session.OIDCSessionManager;
@@ -70,10 +68,10 @@ public class OIDCAuthenticationProvider implements AuthenticationProvider {
         OIDCTokenTransferObject tto = null;
         try {
             tto = this.oidcProvider.acquireTokens(dto, null);
-        } catch (OIDCException e) {
-            if (e.getStep() == OIDCExceptionEnum.NULL_TOKEN_RESPONSE){
+        } catch (AuthenticationCodeFlowException acfe) {
+            if (acfe.getExpCause() == AuthenticationCodeFlowException.Cause.NULL_VALUE){
                 throw new InsufficientAuthenticationException("Null token response.");
-            }else if (e.getStep() == OIDCExceptionEnum.INSUFFICIENT_TOKEN){
+            }else if (acfe.getExpCause() == AuthenticationCodeFlowException.Cause.INSUFFICIENT){
                 throw new InsufficientAuthenticationException("Invalid token response.");
             }
         }
@@ -83,9 +81,9 @@ public class OIDCAuthenticationProvider implements AuthenticationProvider {
 
         //-- Token verify process (JWKS)
         try{
-            this.oidcProvider.verifyToken(tto);
-        } catch (OIDCException e) {
-            LogUtil.error("JWKS Error:" + e.getStep().name() + "-" + e.getMessage(), this);
+            this.oidcProvider.verifyToken(tto, dto.getNonce());
+        } catch (TokenVerifyException tve) {
+            LogUtil.error("JWKS Error:" + tve.getMessage(), this);
             throw new BadCredentialsException("Token verify failed.");
         }
 
@@ -97,9 +95,9 @@ public class OIDCAuthenticationProvider implements AuthenticationProvider {
                 LogUtil.error("Converter has Not implemented correctly.", this);
                 throw new AuthenticationServiceException("Converter has Not implemented correctly.");
             }
-        } catch (RBACException e) {
-            LogUtil.error(e.getMessage(), this);
-            throw new AuthenticationServiceException(e.getLocalizedMessage());
+        } catch (TokenConvertException tce) {
+            LogUtil.error(tce.getMessage(), this);
+            throw new AuthenticationServiceException(tce.getLocalizedMessage());
         }
 
         //-- OIDC Session Register
@@ -107,10 +105,13 @@ public class OIDCAuthenticationProvider implements AuthenticationProvider {
         try {
             oidcTokens = this.oidcProvider.generateTokens(tto);
             this.oidcSessionManager.registerOIDCSession(oidcTokens.getSid(), dto.getSessionId(), oidcTokens);
-        }catch(OIDCException oe){
+        }catch(OIDCSessionException ose){
             //-- Session duplicate.
-            LogUtil.error("Session Duplicate:" + oe.getMessage(), this);
-            throw new SessionAuthenticationException(oe.getLocalizedMessage());
+            LogUtil.error("Session Duplicate:" + ose.getMessage(), this);
+            throw new SessionAuthenticationException(ose.getLocalizedMessage());
+        }catch(TokenProcessingException tpe){
+            LogUtil.error("Token processing:" + tpe.getMessage(), this);
+            throw new AuthenticationServiceException(tpe.getLocalizedMessage());
         }
         return (Authentication)resultAuthentication;
     }

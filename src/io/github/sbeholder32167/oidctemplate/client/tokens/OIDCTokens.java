@@ -13,7 +13,7 @@
 package io.github.sbeholder32167.oidctemplate.client.tokens;
 
 import io.github.sbeholder32167.oidctemplate.client.OIDCTokenTransferObject;
-import io.github.sbeholder32167.oidctemplate.client.exception.RBACException;
+import io.github.sbeholder32167.oidctemplate.client.exception.TokenProcessingException;
 
 import java.io.Serializable;
 
@@ -31,7 +31,7 @@ public abstract class OIDCTokens implements Serializable {
     protected final OIDCTokenTransferObject tto;
     protected String identifier;
     protected String sid;
-    protected OIDCTokens(OIDCTokenTransferObject tto) throws RBACException {
+    protected OIDCTokens(OIDCTokenTransferObject tto) throws TokenProcessingException {
         this.tto = tto;
         this.parseSidIdentifier();
     }
@@ -39,9 +39,9 @@ public abstract class OIDCTokens implements Serializable {
     /**
      * 내부 필드 Parsing.<br> SID와 식별자 (사용자 ID)를 파싱하여 멤버 Field로 넣을 것.<br>
      * 다른 추가적인 Field를 파싱할 때도 사용
-     * @throws RBACException Token 값이 없을 경우 사용
+     * @throws TokenProcessingException Token 값이 없을 경우 사용
      */
-    protected abstract void parseSidIdentifier() throws RBACException;
+    protected abstract void parseSidIdentifier() throws TokenProcessingException;
     /**
      * 식별자를 가져온다<br>
      * 주로 User ID. Spring Security에서의 Principal.

@@ -12,8 +12,7 @@
  */
 package io.github.sbeholder32167.oidctemplate.client.session.storage.impl;
 
-import io.github.sbeholder32167.oidctemplate.exception.OIDCException;
-import io.github.sbeholder32167.oidctemplate.exception.OIDCExceptionEnum;
+import io.github.sbeholder32167.oidctemplate.client.exception.AuthenticationCodeFlowException;
 import io.github.sbeholder32167.oidctemplate.client.session.storage.OIDCAuthParameterStorage;
 
 import java.util.HashMap;
@@ -35,7 +34,7 @@ public class LocalMemoryAuthParameterStorage implements OIDCAuthParameterStorage
     private final Map<String, Map<String, Object>> requestParamMap = new ConcurrentHashMap<>();
 
     @Override
-    public void setRequestParameter(final String key, final String value, final String sessionId) throws OIDCException {
+    public void setRequestParameter(final String key, final String value, final String sessionId) throws AuthenticationCodeFlowException {
         Map<String, Object> paramMap = this.requestParamMap.get(sessionId);
         if (paramMap == null){
             paramMap = new HashMap<String, Object>();
@@ -44,7 +43,7 @@ public class LocalMemoryAuthParameterStorage implements OIDCAuthParameterStorage
         this.requestParamMap.put(sessionId, paramMap);
     }
     @Override
-    public String getRequestParameterValue(final String key, boolean remove, final String sessionId) throws OIDCException {
+    public String getRequestParameterValue(final String key, boolean remove, final String sessionId) throws AuthenticationCodeFlowException {
         Map<String, Object> paramMap = this.requestParamMap.get(sessionId);
         if (paramMap != null){
             Object tObj = paramMap.get(key);
@@ -58,7 +57,9 @@ public class LocalMemoryAuthParameterStorage implements OIDCAuthParameterStorage
                 return result;
             }
         }else{
-            throw new OIDCException(OIDCExceptionEnum.IDP_AUTH_REDIRECT, "No parameter map in the session.");
+            throw new AuthenticationCodeFlowException(AuthenticationCodeFlowException.Step.IDP_AUTH_REDIRECT,
+                                                      AuthenticationCodeFlowException.Cause.NO_PARAM_MAP,
+                                                      "No parameter map in the session.");
         }
     }
 

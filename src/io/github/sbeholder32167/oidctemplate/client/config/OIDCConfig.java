@@ -51,6 +51,12 @@ public class OIDCConfig {
     protected String userinfoEndpoint;
 
     protected String authzEndpoint;
+    protected String inboundLogoutUri;
+    /**
+     * Token 발급 시각 검증을 위한 예외 경계 시간(초).<br/>
+     * 이 시간 만큼 현재시각보다 늦게 발급되어도 유효하게 판정한다.<br/>
+     */
+    protected int iatSkewSec = 30;
 
     public String getIssuer() { return issuer; }
 
@@ -123,5 +129,17 @@ public class OIDCConfig {
     }
     public void setUserinfoEndpoint(String userinfoEndpoint) {
         this.userinfoEndpoint = userinfoEndpoint;
+    }
+    public String getInboundLogoutUri() {
+        return inboundLogoutUri;
+    }
+    public void setInboundLogoutUri(String inboundLogoutUri) {
+        this.inboundLogoutUri = inboundLogoutUri;
+    }
+    public int getIatSkewSec() {
+        return iatSkewSec;
+    }
+    public void setIatSkewSec(int iatSkewSec) {
+        this.iatSkewSec = iatSkewSec;
     }
 }

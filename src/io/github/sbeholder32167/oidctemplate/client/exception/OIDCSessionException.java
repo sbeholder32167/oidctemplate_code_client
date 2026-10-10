@@ -10,32 +10,28 @@
  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  See the License for the specific language governing permissions and limitations under the License.
  */
-package io.github.sbeholder32167.oidctemplate.jwks;
+package io.github.sbeholder32167.oidctemplate.client.exception;
 
 /**
- * JWKS 검증 시 예외 발생 위치 목록.<br>
+ * 세션 동작 중 예외 정의<br>
+ *
+ * <p>세션 처리 관련 동작 중 발생하는 예외에 대해 정의.</p>
  *
  * @author sbeholder6684
  * @version 1.0.0
- * @since 2026-05-26
+ * @since 2026-10-10
  */
-public enum JWKSErrorEnum {
-    DECODE_JWT(0),
-    NULL_ALG(1),
-    NO_ALG(2),
-    NULL_AUDIENCE(10),
-    INVALID_AUDIENCE(11),
-    NULL_JWKS_RESPONSE(20),
-    FAILED_JWKS_RESPONSE(21),
-    NO_KEYS(30),
-    NO_CERTS(40),
-    GEN_CERTS_ERR(41),
-    EXT_CERTS_ERR(42),
-    NOT_SUPPORTED_ALG(50),
-    INVALID_SIG(60);
-
-    final int stepCd;
-    JWKSErrorEnum(final int stepCd){
-        this.stepCd = stepCd;
+public class OIDCSessionException extends OIDCException {
+    private final OIDCSessionException.Cause expCause;
+    public OIDCSessionException(Cause expCause, String message) {
+        super(OIDCException.Category.OIDC_SESSION, message);
+        this.expCause = expCause;
+    }
+    public Cause getExpCause(){
+        return this.expCause;
+    }
+    public enum Cause{
+        DUPLICATE,
+        TIMEOUT
     }
 }
