@@ -29,7 +29,6 @@ import io.github.sbeholder32167.oidctemplate.verify.RSAJWKSVerifier;
 import io.github.sbeholder32167.oidctemplate.rest.RestfulUtil;
 import io.github.sbeholder32167.oidctemplate.util.LogUtil;
 import io.github.sbeholder32167.oidctemplate.util.OIDCUtil;
-import org.springframework.http.HttpMethod;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
