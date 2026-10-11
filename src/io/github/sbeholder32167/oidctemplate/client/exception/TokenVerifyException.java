@@ -42,6 +42,8 @@ public class TokenVerifyException extends TokenProcessingException {
         INVALID_NONCE,
         ALREADY_EXPIRED,
         INVALID_ISSUED,
-        INVALID_AUTHORIZED_PARTY
+        INVALID_NOT_BEFORE,
+        INVALID_AUTHORIZED_PARTY,
+        USER_INFO_QUERY_FAILED
     }
 }

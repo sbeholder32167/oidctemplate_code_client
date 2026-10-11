@@ -21,7 +21,7 @@ import io.github.sbeholder32167.oidctemplate.client.session.OIDCSession;
 import io.github.sbeholder32167.oidctemplate.client.session.OIDCSessionManager;
 import io.github.sbeholder32167.oidctemplate.client.tokens.OIDCTokens;
 import io.github.sbeholder32167.oidctemplate.client.tokens.impl.KeycloakTokens;
-import io.github.sbeholder32167.oidctemplate.verify.IDTokenVerifier;
+import io.github.sbeholder32167.oidctemplate.verify.TokenVerifier;
 import io.github.sbeholder32167.oidctemplate.verify.RSAJWKSVerifier;
 import io.github.sbeholder32167.oidctemplate.client.*;
 import io.github.sbeholder32167.oidctemplate.client.provider.AbstractOIDCProvider;
@@ -204,7 +204,8 @@ public class KeycloakProvider extends AbstractOIDCProvider {
 
     @Override
     public void verifyToken(final OIDCTokenTransferObject tto, final String nonce) throws TokenVerifyException {
-        IDTokenVerifier.verifyToken(tto.getIdToken(), this.oidcConfig, nonce);
+        TokenVerifier.verifyIDToken(tto.getIdToken(), this.oidcConfig, nonce);
+        TokenVerifier.verifyAccessToken(tto.getAccessToken(), this.oidcConfig);
         try{
             RSAJWKSVerifier.verifyToken(this.restfulUtil, this.oidcConfig.getJwksUri(), tto.getIdToken());
             RSAJWKSVerifier.verifyToken(this.restfulUtil, this.oidcConfig.getJwksUri(), tto.getAccessToken());

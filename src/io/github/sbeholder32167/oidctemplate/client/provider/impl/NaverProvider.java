@@ -24,7 +24,7 @@ import io.github.sbeholder32167.oidctemplate.client.session.OIDCSessionManager;
 import io.github.sbeholder32167.oidctemplate.client.session.storage.OIDCAuthParameterStorage;
 import io.github.sbeholder32167.oidctemplate.client.tokens.OIDCTokens;
 import io.github.sbeholder32167.oidctemplate.client.tokens.impl.NaverTokens;
-import io.github.sbeholder32167.oidctemplate.verify.IDTokenVerifier;
+import io.github.sbeholder32167.oidctemplate.verify.TokenVerifier;
 import io.github.sbeholder32167.oidctemplate.verify.RSAJWKSVerifier;
 import io.github.sbeholder32167.oidctemplate.rest.RestfulUtil;
 import io.github.sbeholder32167.oidctemplate.util.LogUtil;
@@ -199,13 +199,14 @@ public class NaverProvider extends AbstractOIDCProvider {
 
     @Override
     public void verifyToken(OIDCTokenTransferObject tto, final String nonce) throws TokenVerifyException {
-        IDTokenVerifier.verifyToken(tto.getIdToken(), this.oidcConfig, nonce);
+        TokenVerifier.verifyIDToken(tto.getIdToken(), this.oidcConfig, nonce);
         try{
             //-- Key Set에 alg Claim이 없는 특이한 형태. 그래서 alg Check를 Skip.
             RSAJWKSVerifier.verifyToken(this.restfulUtil, this.oidcConfig.getJwksUri(), tto.getIdToken(), true);
         }catch(JWKSException je){
             throw new TokenVerifyException(TokenVerifyException.Cause.JWKS, "JWKS Error:" + je.step.name() + "-" +  je.getMessage());
         }
+        this.queryTokenInfo(tto.getAccessToken());
     }
 
     @Override

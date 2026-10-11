@@ -408,7 +408,7 @@ public class OIDCUtil {
      * @param accessToken Access Token
      * @param method Http Method (GET, POST)
      * @param param Body Parameters
-     * @return Map으로 변환된 값을 리턴.
+     * @return Map으로 변환된 값을 리턴. 200 응답이 아닐 경우 null을 리턴한다.
      */
     public static Map<String, Object> queryAPIbyMap(RestfulUtil restUtil, final String uri, final String accessToken,
                                                     HttpMethod method, Map<String, String> param){

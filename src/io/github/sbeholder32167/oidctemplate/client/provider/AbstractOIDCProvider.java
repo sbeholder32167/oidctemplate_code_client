@@ -14,9 +14,13 @@ package io.github.sbeholder32167.oidctemplate.client.provider;
 
 import io.github.sbeholder32167.oidctemplate.client.config.OIDCConfig;
 import io.github.sbeholder32167.oidctemplate.client.exception.TokenProcessingException;
+import io.github.sbeholder32167.oidctemplate.client.exception.TokenVerifyException;
 import io.github.sbeholder32167.oidctemplate.client.tokens.OIDCTokens;
 import io.github.sbeholder32167.oidctemplate.rest.RestfulUtil;
 import io.github.sbeholder32167.oidctemplate.client.session.storage.OIDCAuthParameterStorage;
+import io.github.sbeholder32167.oidctemplate.util.LogUtil;
+import io.github.sbeholder32167.oidctemplate.util.OIDCUtil;
+import org.springframework.http.HttpMethod;
 
 /**
  * OIDC 인증 제공자 추상 Class.<br>
@@ -78,5 +82,18 @@ public abstract class AbstractOIDCProvider implements OIDCProvider{
         }
         long currentTimeSec = System.currentTimeMillis() / 1000;
         return currentTimeSec + tokens.getTokenTransferObj().getRefreshExpiresIn();
+    }
+
+    /**
+     * 토큰 정보 API에 접근함으로서 AccessToken의 유효성을 검증한다.
+     * @param accessToken Access Token
+     * @throws TokenVerifyException 200 응답을 받지 못했을 경우 발생
+     */
+    protected void queryTokenInfo(final String accessToken) throws TokenVerifyException{
+        if (OIDCUtil.queryAPIbyMap(this.restfulUtil, this.oidcConfig.getUserinfoEndpoint(), accessToken,
+                HttpMethod.GET, null) == null){
+            throw new TokenVerifyException(TokenVerifyException.Cause.USER_INFO_QUERY_FAILED, "Token verification has failed.");
+        }
+        LogUtil.info("Access Token verification (using query) has been completed successfully.", this);
     }
 }
