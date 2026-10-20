@@ -222,8 +222,8 @@ public class RSAJWKSVerifier {
         byte[] nBytes = Base64.getUrlDecoder().decode(nStr);
         byte[] eBytes = Base64.getUrlDecoder().decode(eStr);
         //-- Under JDK 1.8
-        //byte[] nBytes = Base64Utils.decodeFromString(nStr);
-        //byte[] eBytes = Base64Utils.decodeFromString(eStr);
+        //byte[] nBytes = Base64Utils.decodeFromUrlSafeString(nStr);
+        //byte[] eBytes = Base64Utils.decodeFromUrlSafeString(eStr);
 
         //-- convert to BigInteger.
         BigInteger modulus = new BigInteger(1, nBytes);
