@@ -93,13 +93,11 @@ public class TokenVerifier {
             throw new TokenVerifyException(TokenVerifyException.Cause.NO_CLAIM, "Issuer not in config.");
         }
         checkIssuer(decodedTkn, target);
-        //-- check audience.
+        //-- check Authorized Party.
         target = oidcConfig.getClientId();
-        if (target == null || target.isEmpty()){
+        if (target == null || target.isEmpty()) {
             throw new TokenVerifyException(TokenVerifyException.Cause.NO_CLAIM, "Client ID not in config.");
         }
-        checkAudience(decodedTkn, target);
-        //-- check Authorized Party.
         checkAuthorizedParty(decodedTkn, target);
         LogUtil.info("Valid Access Token.(Verified)", TokenVerifier.class.getName());
     }
@@ -181,10 +179,8 @@ public class TokenVerifier {
         if (decodedToken.getIssuedAt().getTime() > currentTime + skewSecMills){
             throw new TokenVerifyException(TokenVerifyException.Cause.INVALID_ISSUED, "Token has issued in future.Invalid token.");
         }
-        if (!decodedToken.getClaim("nbf").isNull()){
-            if (decodedToken.getNotBefore().getTime() > currentTime + skewSecMills){
-                throw new TokenVerifyException(TokenVerifyException.Cause.INVALID_NOT_BEFORE, "Token has issued in future.Invalid token.");
-            }
+        if (!decodedToken.getClaim("nbf").isNull() && decodedToken.getNotBefore().getTime() > currentTime + skewSecMills){
+            throw new TokenVerifyException(TokenVerifyException.Cause.INVALID_NOT_BEFORE, "Token has issued in future.Invalid token.");
         }
         LogUtil.info("The expiration/issued time of token has been checked.(Valid)", TokenVerifier.class.getName());
     }

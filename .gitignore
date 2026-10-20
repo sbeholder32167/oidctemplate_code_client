@@ -6,6 +6,7 @@ out/
 .idea/
 oidc_template_code_client.iml
 doc/
+pom.xml
 
 ### Eclipse ###
 .apt_generated
